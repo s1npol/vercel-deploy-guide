@@ -34,6 +34,11 @@
     lastReverseAt: 0,
     forwardWatchdog: 0,
     rescueTimeline: null,
+    intent: null,
+    transitionRun: 0,
+    lastWheelAt: 0,
+    suppressBoundaryUntil: 0,
+    trace: [],
   };
 
   const clearForwardWatchdog = () => {
@@ -44,8 +49,14 @@
   const emit = (phase, source = "legacy") => {
     state.phase = phase;
     root.dataset.pgPageTurnState = phase;
+    root.dataset.pgPageTurnSource = source;
+    root.dataset.pgPageTurnRun = String(state.transitionRun);
+    state.trace.push(`${Math.round(performance.now())}:${phase}:${source}:r${state.transitionRun}`);
+    state.trace = state.trace.slice(-10);
+    root.dataset.pgPageTurnTrace = state.trace.join("|");
     if (phase === "before" || phase === "after") {
       clearForwardWatchdog();
+      state.intent = null;
       delete root.dataset.pgPageTurnError;
     }
     window.dispatchEvent(new CustomEvent("portfolio:page-turn-state", {
@@ -91,6 +102,23 @@
       Math.min(target.getBoundingClientRect().top + window.scrollY - navHeight, maxScroll),
     );
     const engine = getScrollEngine();
+    state.suppressBoundaryUntil = performance.now() + 420;
+    engine?.start?.();
+    if (engine?.scrollTo) engine.scrollTo(top, { immediate: true, force: true });
+    else window.scrollTo(0, top);
+  };
+
+  const alignProfile = () => {
+    const target = document.querySelector("[home-trigger]");
+    if (!target) return;
+    const navHeight = document.querySelector(".pg-nav")?.getBoundingClientRect().height || 0;
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const top = Math.max(
+      0,
+      Math.min(target.getBoundingClientRect().top + window.scrollY - navHeight, maxScroll),
+    );
+    const engine = getScrollEngine();
+    state.suppressBoundaryUntil = performance.now() + 420;
     engine?.start?.();
     if (engine?.scrollTo) engine.scrollTo(top, { immediate: true, force: true });
     else window.scrollTo(0, top);
@@ -155,7 +183,12 @@
     state.monitorRun += 1;
   };
 
-  const settleAfterInstant = (source = "fallback", shouldAlign = false) => {
+  const settleAfterInstant = (
+    source = "fallback",
+    shouldAlign = false,
+    expectedRun = state.transitionRun,
+  ) => {
+    if (expectedRun !== state.transitionRun || state.intent === "reverse") return;
     stopMonitor();
     clearForwardWatchdog();
     state.rescueTimeline?.kill?.();
@@ -174,10 +207,16 @@
     getScrollEngine()?.start?.();
     if (shouldAlign) alignExperience();
     window.ScrollTrigger?.refresh?.();
+    if (expectedRun !== state.transitionRun || state.intent === "reverse") return;
     emit("after", source);
   };
 
-  const settleBeforeInstant = (source = "fallback") => {
+  const settleBeforeInstant = (
+    source = "fallback",
+    shouldAlign = false,
+    expectedRun = state.transitionRun,
+  ) => {
+    if (expectedRun !== state.transitionRun || state.intent === "forward") return;
     stopMonitor();
     clearForwardWatchdog();
     state.rescueTimeline?.kill?.();
@@ -193,10 +232,17 @@
       canvas.style.opacity = "1";
     }
     getScrollEngine()?.start?.();
+    if (shouldAlign) alignProfile();
+    window.ScrollTrigger?.refresh?.();
+    if (expectedRun !== state.transitionRun || state.intent === "forward") return;
     emit("before", source);
   };
 
-  const rescueForward = (source = "stalled") => {
+  const rescueForward = (
+    source = "stalled",
+    expectedRun = state.transitionRun,
+  ) => {
+    if (expectedRun !== state.transitionRun || state.intent === "reverse") return;
     if (state.phase === "after" || state.phase === "forward-recovery") return;
     stopMonitor();
     clearForwardWatchdog();
@@ -208,7 +254,7 @@
     emit("forward-recovery", source);
 
     if (!canvas || !gsap || reducedMotion) {
-      settleAfterInstant("recovery-instant", true);
+      settleAfterInstant("recovery-instant", true, expectedRun);
       return;
     }
 
@@ -222,10 +268,12 @@
     state.rescueTimeline = gsap.timeline({
       defaults: { overwrite: true },
       onComplete: () => {
+        if (expectedRun !== state.transitionRun || state.intent === "reverse") return;
         state.rescueTimeline = null;
         engine?.start?.();
         alignExperience();
         window.ScrollTrigger?.refresh?.();
+        if (expectedRun !== state.transitionRun || state.intent === "reverse") return;
         emit("after", "recovery-complete");
       },
     });
@@ -243,30 +291,32 @@
       }, `+=${needsEntry ? 0.08 : 0}`);
   };
 
-  const startForwardWatchdog = () => {
+  const startForwardWatchdog = (expectedRun) => {
     clearForwardWatchdog();
     state.forwardWatchdog = window.setTimeout(() => {
+      if (expectedRun !== state.transitionRun || state.intent !== "forward") return;
       if (state.phase !== "forward") return;
       const visual = readVisualState();
       if (visual.canvasTop > visual.viewportHeight * 0.72) {
-        rescueForward("canvas-entry-stall");
+        rescueForward("canvas-entry-stall", expectedRun);
         return;
       }
 
       state.forwardWatchdog = window.setTimeout(() => {
+        if (expectedRun !== state.transitionRun || state.intent !== "forward") return;
         if (state.phase !== "forward") return;
         const latest = readVisualState();
         if (
           latest.canvasTop > -latest.viewportHeight * 0.55 ||
           latest.headingOpacity <= 0.08
         ) {
-          rescueForward("sequence-settle-stall");
+          rescueForward("sequence-settle-stall", expectedRun);
         }
       }, 3500);
     }, 700);
   };
 
-  const monitor = (direction) => {
+  const monitor = (direction, expectedRun) => {
     stopMonitor();
     const run = state.monitorRun;
     const startedAt = performance.now();
@@ -274,6 +324,7 @@
 
     const step = (now) => {
       if (run !== state.monitorRun) return;
+      if (expectedRun !== state.transitionRun || state.intent !== direction) return;
       const visual = readVisualState();
       const forwardReady =
         visual.canvasTop <= -visual.viewportHeight * 0.9 &&
@@ -282,14 +333,18 @@
 
       if ((direction === "forward" && forwardReady) || (direction === "reverse" && reverseReady)) {
         state.monitorFrame = 0;
+        if (direction === "forward") alignExperience();
+        else alignProfile();
+        window.ScrollTrigger?.refresh?.();
+        if (expectedRun !== state.transitionRun || state.intent !== direction) return;
         emit(direction === "forward" ? "after" : "before", "visual-settle");
         return;
       }
 
       if (now - startedAt >= timeout) {
         state.monitorFrame = 0;
-        if (direction === "forward") rescueForward("monitor-timeout");
-        else settleBeforeInstant("reverse-timeout");
+        if (direction === "forward") rescueForward("monitor-timeout", expectedRun);
+        else settleBeforeInstant("reverse-timeout", true, expectedRun);
         return;
       }
 
@@ -300,39 +355,76 @@
   };
 
   const invokeForward = (callback, context, args = []) => {
+    if (
+      performance.now() < state.suppressBoundaryUntil &&
+      state.intent === "reverse"
+    ) {
+      return false;
+    }
+    if (state.phase === "forward" || state.phase === "forward-recovery") return false;
+    if (state.phase === "after") return false;
     const now = performance.now();
-    if (now - state.lastForwardAt < 180) return false;
+    const changingDirection =
+      state.phase === "reverse" || state.phase === "reverse-recovery";
+    if (!changingDirection && now - state.lastForwardAt < 180) return false;
     state.lastForwardAt = now;
+    state.intent = "forward";
+    const expectedRun = ++state.transitionRun;
+    stopMonitor();
+    clearForwardWatchdog();
+    state.rescueTimeline?.kill?.();
+    state.rescueTimeline = null;
+    if (state.phase === "reverse" || state.phase === "reverse-recovery") {
+      const canvas = document.querySelector("#canvasPin");
+      if (canvas) window.gsap?.killTweensOf?.(canvas);
+    }
     emit("forward", "request");
     try {
       callback?.apply(context, args);
-      monitor("forward");
-      startForwardWatchdog();
+      monitor("forward", expectedRun);
+      startForwardWatchdog(expectedRun);
       return true;
     } catch (error) {
       root.dataset.pgPageTurnError = error instanceof Error ? error.message : String(error);
       console.warn("[portfolio] legacy page turn failed; using visual recovery", error);
       emit("forward-error", "exception");
-      requestAnimationFrame(() => rescueForward("legacy-error"));
+      requestAnimationFrame(() => rescueForward("legacy-error", expectedRun));
       return true;
     }
   };
 
   const invokeReverse = (callback, context, args = []) => {
+    if (
+      performance.now() < state.suppressBoundaryUntil &&
+      state.intent === "forward"
+    ) {
+      return false;
+    }
+    if (state.phase === "reverse" || state.phase === "reverse-recovery") return false;
+    if (state.phase === "before" || state.phase === "ready") return false;
     const now = performance.now();
-    if (now - state.lastReverseAt < 180) return false;
+    const changingDirection =
+      state.phase === "forward" || state.phase === "forward-recovery";
+    if (!changingDirection && now - state.lastReverseAt < 180) return false;
     state.lastReverseAt = now;
+    state.intent = "reverse";
+    const expectedRun = ++state.transitionRun;
+    stopMonitor();
+    clearForwardWatchdog();
+    state.rescueTimeline?.kill?.();
+    state.rescueTimeline = null;
+    const canvas = document.querySelector("#canvasPin");
+    if (canvas) window.gsap?.killTweensOf?.(canvas);
     emit("reverse", "request");
     try {
-      clearForwardWatchdog();
       callback?.apply(context, args);
-      monitor("reverse");
+      monitor("reverse", expectedRun);
       return true;
     } catch (error) {
       root.dataset.pgPageTurnError = error instanceof Error ? error.message : String(error);
       console.warn("[portfolio] legacy reverse page turn failed; restoring Profile", error);
       emit("reverse-error", "exception");
-      requestAnimationFrame(() => settleBeforeInstant("reverse-error"));
+      requestAnimationFrame(() => settleBeforeInstant("reverse-error", true, expectedRun));
       return true;
     }
   };
@@ -393,26 +485,67 @@
   window.addEventListener("scroll", () => {
     const currentScrollY = window.scrollY;
     const movingDown = currentScrollY > lastObservedScrollY + 0.5;
+    const movingUp = currentScrollY < lastObservedScrollY - 0.5;
     lastObservedScrollY = currentScrollY;
-    if (!movingDown || boundaryFrame) return;
+    if ((!movingDown && !movingUp) || boundaryFrame) return;
+    if (performance.now() < state.suppressBoundaryUntil) return;
     if (
       root.dataset.pgNavJumpLock === "true" ||
       root.dataset.pgContactJumpLock === "true"
     ) {
       return;
     }
-    if (state.phase !== "before" && state.phase !== "ready") return;
-
     boundaryFrame = requestAnimationFrame(() => {
       boundaryFrame = 0;
-      if (state.phase !== "before" && state.phase !== "ready") return;
+      if (performance.now() < state.suppressBoundaryUntil) return;
       const trigger = document.querySelector("[home-trigger]");
-      if (!trigger || typeof state.forward !== "function") return;
+      if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      if (rect.top < 0 && rect.bottom <= window.innerHeight + 2) {
+      if (
+        movingDown &&
+        (state.phase === "before" || state.phase === "ready") &&
+        typeof state.forward === "function" &&
+        rect.top < 0 &&
+        rect.bottom <= window.innerHeight + 2
+      ) {
         state.forward();
+      } else if (
+        movingUp &&
+        state.phase === "after" &&
+        typeof state.reverse === "function" &&
+        rect.top >= -2
+      ) {
+        state.reverse();
       }
     });
+  }, { passive: true });
+
+  window.addEventListener("wheel", (event) => {
+    if (Math.abs(event.deltaY) < 10) return;
+    if (
+      root.dataset.pgNavJumpLock === "true" ||
+      root.dataset.pgContactJumpLock === "true"
+    ) {
+      return;
+    }
+
+    const now = performance.now();
+    if (now - state.lastWheelAt < 90) return;
+    state.lastWheelAt = now;
+
+    if (
+      event.deltaY < 0 &&
+      (state.phase === "forward" || state.phase === "forward-recovery")
+    ) {
+      state.suppressBoundaryUntil = 0;
+      state.reverse?.();
+    } else if (
+      event.deltaY > 0 &&
+      (state.phase === "reverse" || state.phase === "reverse-recovery")
+    ) {
+      state.suppressBoundaryUntil = 0;
+      state.forward?.();
+    }
   }, { passive: true });
 
   window.__portfolioPageTurn = {
@@ -440,10 +573,14 @@
       return state.phase;
     },
     settleAfter() {
-      settleAfterInstant("fallback");
+      state.intent = "forward";
+      const expectedRun = ++state.transitionRun;
+      settleAfterInstant("fallback", false, expectedRun);
     },
     settleBefore() {
-      settleBeforeInstant("fallback");
+      state.intent = "reverse";
+      const expectedRun = ++state.transitionRun;
+      settleBeforeInstant("fallback", true, expectedRun);
     },
   };
 })();
