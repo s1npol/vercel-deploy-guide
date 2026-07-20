@@ -693,13 +693,18 @@
     if (!nav || nav.dataset.sectionNavReady === "true") return;
     nav.dataset.sectionNavReady = "true";
 
+    const profile =
+      document.querySelector(".home-tabs_layout") ||
+      document.querySelector("section.home-selection");
     const experience = document.querySelector(".timeline_wrapper");
     const selectedWork = document.querySelector(".home-benefits-blank");
+    if (profile && !profile.id) profile.id = "pg-profile-anchor";
     if (experience && !experience.id) experience.id = "pg-experience";
     if (selectedWork && !selectedWork.id) selectedWork.id = "pg-selected-work";
 
     const links = Array.from(nav.querySelectorAll(".pg-nav-links [data-pg-nav-target]"));
-    const selectors = ["#pg-home", "#pg-experience", "#pg-selected-work"];
+    const profileSelector = profile?.id ? `#${profile.id}` : "#pg-home";
+    const selectors = [profileSelector, "#pg-experience", "#pg-selected-work"];
     links.forEach((link, index) => {
       const selector = selectors[index];
       if (!selector) return;
@@ -725,108 +730,26 @@
       else window.scrollTo(0, top);
     };
 
-    let experienceTransitionRecoveryTimer = 0;
-    const queueExperienceTransitionRecovery = (section) => {
-      window.clearTimeout(experienceTransitionRecoveryTimer);
-      if (section?.id !== "pg-experience") return;
-
-      experienceTransitionRecoveryTimer = window.setTimeout(() => {
-        const canvas = document.querySelector("#canvasPin");
-        if (!canvas) return;
-
-        const viewportHeight = Math.max(1, window.innerHeight);
-        const canvasRect = canvas.getBoundingClientRect();
-        const heading = document.querySelector(".timeline_heading");
-        const headingOpacity = heading
-          ? Number.parseFloat(getComputedStyle(heading).opacity) || 0
-          : 1;
-        const destination = getTargetTop(section);
-        const canvasStillCovering =
-          canvasRect.top > -viewportHeight * 0.16 &&
-          canvasRect.top < viewportHeight * 0.16 &&
-          canvasRect.bottom > viewportHeight * 0.84;
-        const canvasWaitingBelow =
-          canvasRect.top >= viewportHeight * 0.45 &&
-          canvasRect.top < viewportHeight * 1.4;
-        const destinationMissed = Math.abs(window.scrollY - destination) > viewportHeight * 0.24;
-        const experienceStillHidden = headingOpacity <= 0.08;
-        if (
-          !canvasStillCovering &&
-          !canvasWaitingBelow &&
-          !destinationMissed &&
-          !experienceStillHidden
-        ) {
-          return;
-        }
-
-        const columns = Array.from(document.querySelectorAll(".timeline_colum_left"));
-        const progress = Array.from(
-          document.querySelectorAll(".timeline_progress_main, .timeline_progress"),
-        );
-        const gsap = window.gsap;
-        const scrollEngine =
-          window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
-
-        setScroll(scrollEngine, destination);
-        requestAnimationFrame(() => setScroll(scrollEngine, getTargetTop(section)));
-
-        const finalizeRecovery = () => {
-          scrollEngine?.start?.();
-          window.ScrollTrigger?.refresh?.();
-          delete document.documentElement.dataset.pgNavJumpLock;
-          document.documentElement.dataset.pgExperienceTransitionState = "recovered";
-          window.dispatchEvent(new CustomEvent("portfolio:experience-transition-recovered"));
+    const waitFor = (test, timeout, runIsCurrent) =>
+      new Promise((resolve) => {
+        const startedAt = performance.now();
+        const step = (now) => {
+          if (!runIsCurrent()) {
+            resolve(false);
+            return;
+          }
+          if (test()) {
+            resolve(true);
+            return;
+          }
+          if (now - startedAt >= timeout) {
+            resolve(false);
+            return;
+          }
+          requestAnimationFrame(step);
         };
-
-        if (gsap) {
-          gsap.killTweensOf(canvas);
-          gsap.to(canvas, {
-            y: "-100%",
-            opacity: 1,
-            duration: 0.52,
-            ease: "power3.inOut",
-            onComplete: finalizeRecovery,
-          });
-          if (heading) {
-            gsap.to(heading, {
-              y: "0%",
-              scale: 1,
-              opacity: 1,
-              duration: 0.48,
-              delay: 0.12,
-              ease: "power3.out",
-            });
-          }
-          if (columns.length) {
-            gsap.to(columns, {
-              y: "0%",
-              opacity: 1,
-              duration: 0.48,
-              delay: 0.16,
-              stagger: 0.06,
-              ease: "power3.out",
-            });
-          }
-          if (progress.length) {
-            gsap.to(progress, { opacity: 1, duration: 0.4, delay: 0.18 });
-          }
-        } else {
-          canvas.style.transform = "translate3d(0, -100%, 0)";
-          if (heading) {
-            heading.style.opacity = "1";
-            heading.style.transform = "none";
-          }
-          columns.forEach((column) => {
-            column.style.opacity = "1";
-            column.style.transform = "none";
-          });
-          progress.forEach((element) => {
-            element.style.opacity = "1";
-          });
-          finalizeRecovery();
-        }
-      }, 5200);
-    };
+        requestAnimationFrame(step);
+      });
 
     const restoreSelectedWorkReturn = () => {
       if (window.location.hash !== "#pg-selected-work" || !selectedWork) return;
@@ -897,7 +820,40 @@
 
     restoreSelectedWorkReturn();
 
-    const glideTo = (section) => {
+    let navPhase = "idle";
+    let pendingSelector = "";
+    let navRunId = 0;
+    let finishedRunId = 0;
+    let navSafetyTimer = 0;
+
+    const runIsCurrent = (runId) => runId === navRunId;
+    const getPageTurn = () => window.__portfolioPageTurn;
+
+    const updateNavState = (phase, selector = "") => {
+      navPhase = phase;
+      nav.setAttribute("aria-busy", phase === "idle" ? "false" : "true");
+      document.documentElement.dataset.pgNavPhase = phase;
+      if (selector) document.documentElement.dataset.pgNavRequestedTarget = selector;
+      links.forEach((link) => {
+        const requested = link.dataset.pgNavTarget === selector;
+        link.classList.toggle("is-pending", phase !== "idle" && requested);
+        if (phase !== "idle") link.removeAttribute("aria-current");
+      });
+    };
+
+    const markActive = (selector) => {
+      links.forEach((link) => {
+        link.classList.remove("is-pending");
+        if (link.dataset.pgNavTarget === selector) {
+          link.setAttribute("aria-current", "page");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      });
+    };
+
+    const glideTo = (section, runId, duration = 700) =>
+      new Promise((resolve) => {
       window.cancelAnimationFrame(window.__portfolioNavGlideRaf);
       window.cancelAnimationFrame(window.__portfolioContactGlideRaf);
       window.clearTimeout(window.__pgNavJumpLockTimer);
@@ -918,24 +874,32 @@
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       let completed = false;
 
-      const complete = () => {
+      const complete = (success = true) => {
         if (completed) return;
         completed = true;
         window.clearTimeout(window.__pgNavJumpLockTimer);
-        setScroll(scrollEngine, getTargetTop(section));
-        delete document.documentElement.dataset.pgNavJumpLock;
-        window.dispatchEvent(new CustomEvent("portfolio:nav-glide-complete", { detail: { target: `#${section.id}` } }));
+        if (success && runIsCurrent(runId)) {
+          setScroll(scrollEngine, getTargetTop(section));
+          window.dispatchEvent(new CustomEvent("portfolio:nav-glide-complete", {
+            detail: { target: `#${section.id}` },
+          }));
+        }
+        resolve(success && runIsCurrent(runId));
       };
 
-      if (reducedMotion || Math.abs(distance) < 2) {
+      if (reducedMotion || duration <= 0 || Math.abs(distance) < 2) {
         setScroll(scrollEngine, destination);
         complete();
         return;
       }
 
-      const duration = 750;
       const startedAt = performance.now();
       const step = (now) => {
+        if (!runIsCurrent(runId)) {
+          window.__portfolioNavGlideRaf = 0;
+          complete(false);
+          return;
+        }
         const progress = Math.min(1, (now - startedAt) / duration);
         const eased = 1 - Math.pow(1 - progress, 4);
         setScroll(scrollEngine, start + distance * eased);
@@ -947,30 +911,136 @@
         complete();
       };
       window.__portfolioNavGlideRaf = requestAnimationFrame(step);
-      window.__pgNavJumpLockTimer = window.setTimeout(complete, 1100);
+      window.__pgNavJumpLockTimer = window.setTimeout(complete, duration + 420);
+    });
+
+    const ensurePageTurn = async (expected, runId) => {
+      const current = () => runIsCurrent(runId);
+      await waitFor(() => getPageTurn()?.isReady?.(), 2800, current);
+      if (!current()) return false;
+
+      const bridge = getPageTurn();
+      if (!bridge) return false;
+      bridge.sync?.();
+      if (bridge.getState?.() === expected) return true;
+
+      const started =
+        expected === "after"
+          ? bridge.forward?.()
+          : bridge.reverse?.();
+      if (!started && bridge.getState?.() === expected) return true;
+
+      const settled = await waitFor(
+        () => bridge.getState?.() === expected,
+        expected === "after" ? 7800 : 6800,
+        current,
+      );
+      if (settled || !current()) return settled;
+
+      if (expected === "after") bridge.settleAfter?.();
+      else bridge.settleBefore?.();
+      return waitFor(() => bridge.getState?.() === expected, 900, current);
     };
 
-    let lastSectionJump = 0;
+    const performNavigation = async (selector, runId) => {
+      const section = document.querySelector(selector);
+      if (!section || !runIsCurrent(runId)) return false;
+
+      const expectedPageTurn = selector === profileSelector ? "before" : "after";
+      const pageTurnSettled = await ensurePageTurn(expectedPageTurn, runId);
+      if (!runIsCurrent(runId)) return false;
+
+      if (!pageTurnSettled) {
+        const bridge = getPageTurn();
+        if (expectedPageTurn === "after") bridge?.settleAfter?.();
+        else bridge?.settleBefore?.();
+      }
+
+      const duration =
+        selector === profileSelector
+          ? 620
+          : selector === "#pg-experience"
+            ? 680
+            : 720;
+      return glideTo(section, runId, duration);
+    };
+
+    const finishNavigation = (selector, runId) => {
+      if (!runIsCurrent(runId) || finishedRunId === runId) return;
+      finishedRunId = runId;
+      window.clearTimeout(navSafetyTimer);
+      window.clearTimeout(window.__pgNavJumpLockTimer);
+      delete document.documentElement.dataset.pgNavJumpLock;
+      delete document.documentElement.dataset.pgNavPendingTarget;
+      updateNavState("idle", selector);
+      markActive(selector);
+      window.dispatchEvent(new CustomEvent("portfolio:section-navigation-complete", {
+        detail: { target: selector },
+      }));
+
+      const nextSelector = pendingSelector;
+      pendingSelector = "";
+      if (nextSelector && nextSelector !== selector) {
+        requestAnimationFrame(() => startNavigation(nextSelector));
+      }
+    };
+
+    const hardSettleNavigation = (selector, runId) => {
+      if (!runIsCurrent(runId) || finishedRunId === runId) return Promise.resolve(false);
+      const section = document.querySelector(selector);
+      const bridge = getPageTurn();
+      if (selector === profileSelector) bridge?.settleBefore?.();
+      else bridge?.settleAfter?.();
+      if (!section) {
+        finishNavigation(selector, runId);
+        return Promise.resolve(false);
+      }
+      return glideTo(section, runId, 260).finally(() => finishNavigation(selector, runId));
+    };
+
+    function startNavigation(selector) {
+      const section = document.querySelector(selector);
+      if (!section) return;
+
+      navRunId += 1;
+      const runId = navRunId;
+      finishedRunId = 0;
+      document.documentElement.dataset.pgNavJumpLock = "true";
+      updateNavState("transitioning", selector);
+
+      window.clearTimeout(navSafetyTimer);
+      navSafetyTimer = window.setTimeout(
+        () => hardSettleNavigation(selector, runId),
+        12500,
+      );
+
+      performNavigation(selector, runId)
+        .catch(() => hardSettleNavigation(selector, runId))
+        .finally(() => finishNavigation(selector, runId));
+    }
+
+    const requestNavigation = (selector) => {
+      if (!document.querySelector(selector)) return;
+      if (navPhase !== "idle") {
+        pendingSelector = selector;
+        document.documentElement.dataset.pgNavPendingTarget = selector;
+        updateNavState("queued", selector);
+        return;
+      }
+      startNavigation(selector);
+    };
+
     const activate = (event) => {
       const link = event.target?.closest?.("[data-pg-nav-target]");
       if (!link || !nav.contains(link)) return;
-      if (event.type === "pointerdown" && event.button !== 0) return;
-      if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      const now = Date.now();
-      if (now - lastSectionJump < 600) return;
-      const section = document.querySelector(link.dataset.pgNavTarget);
-      if (!section) return;
-      lastSectionJump = now;
-      glideTo(section);
-      queueExperienceTransitionRecovery(section);
+      requestNavigation(link.dataset.pgNavTarget);
     };
 
-    nav.addEventListener("pointerdown", activate, true);
+    updateNavState("idle");
     nav.addEventListener("click", activate, true);
-    nav.addEventListener("keydown", activate, true);
   }
 
   function setupContactNavLink() {
@@ -1983,6 +2053,17 @@
     const isCompactFrame = () => window.matchMedia("(max-width: 1280px), (max-height: 900px)").matches;
     const getSnapThreshold = () => (isPhoneFrame() ? 0.74 : isCompactFrame() ? 0.44 : 0.55);
     const getResetThreshold = () => (isPhoneFrame() ? 0.14 : isCompactFrame() ? 0.24 : 0.35);
+    const navigationBusy = () => {
+      const root = document.documentElement;
+      const pageTurnState = root.dataset.pgPageTurnState;
+      return (
+        root.dataset.pgNavJumpLock === "true" ||
+        root.dataset.pgNavPhase === "transitioning" ||
+        root.dataset.pgNavPhase === "queued" ||
+        pageTurnState === "forward" ||
+        pageTurnState === "reverse"
+      );
+    };
 
     const getVisibleRatio = () => {
       const rect = slot.getBoundingClientRect();
@@ -2046,7 +2127,7 @@
     };
 
     const maybeSnap = (direction = lastScrollDirection) => {
-      if (isSnapping) return;
+      if (isSnapping || navigationBusy()) return;
       const ratio = getVisibleRatio();
       const snapThreshold = getSnapThreshold();
       const resetThreshold = getResetThreshold();
@@ -2081,6 +2162,10 @@
       if (Math.abs(delta) > 0.5) lastScrollDirection = delta > 0 ? 1 : -1;
       lastScrollY = currentScrollY;
       window.clearTimeout(scrollSettleTimer);
+      if (navigationBusy()) {
+        cancelAlignment();
+        return;
+      }
       if (isSnapping || touchActive) return;
       const settleDelay = isPhoneFrame() ? 220 : isCompactFrame() ? 150 : 180;
       scrollSettleTimer = window.setTimeout(() => maybeSnap(lastScrollDirection), settleDelay);
@@ -2091,7 +2176,7 @@
       if (Math.abs(impulse) > 0.5) lastScrollDirection = impulse > 0 ? 1 : -1;
       window.clearTimeout(scrollSettleTimer);
       cancelAlignment();
-      if (isPhoneFrame()) {
+      if (navigationBusy() || isPhoneFrame()) {
         return;
       }
       const settleDelay = isCompactFrame() ? 150 : 180;
@@ -2118,7 +2203,7 @@
 
     window.addEventListener("portfolio:project-open", () => {
       hasSnappedInView = true;
-      if (isPhoneFrame()) return;
+      if (navigationBusy() || isPhoneFrame()) return;
       requestAnimationFrame(() => alignProjectPage());
     });
 
@@ -2131,6 +2216,7 @@
     const releaseTouch = () => {
       touchActive = false;
       window.clearTimeout(scrollSettleTimer);
+      if (navigationBusy()) return;
       scrollSettleTimer = window.setTimeout(() => maybeSnap(lastScrollDirection), 240);
     };
     window.addEventListener("touchend", releaseTouch, { passive: true });
