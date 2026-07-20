@@ -1,0 +1,14 @@
+{
+  "name": "sinpol-portfolio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sinpol product design portfolio and project case studies.",
+  "scripts": {
+    "build": "node scripts/build-release.mjs",
+    "preview": "node scripts/serve-dist.mjs",
+    "verify": "node scripts/build-release.mjs --verify-only"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

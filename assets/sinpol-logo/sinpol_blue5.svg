@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="532" height="666" viewBox="0 0 532 666" fill="none">
+  <defs>
+    <clipPath id="r0"><rect x="230.32" y="34.83" width="10.82" height="8.45"/></clipPath>
+    <clipPath id="r1"><rect x="474.79" y="336.83" width="11.11" height="7.80"/></clipPath>
+    <clipPath id="r2"><rect x="219.19" y="346.49" width="10.82" height="8.45"/></clipPath>
+    <clipPath id="r3"><rect x="35.03" y="413.27" width="10.82" height="8.45"/></clipPath>
+    <filter id="soften" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.18"/></filter>
+  </defs>
+  <g fill="#298DFF" opacity="0.62" filter="url(#soften)" font-family="TWK Everett Mono, IBM Plex Mono, Consolas, monospace" font-size="7.35" font-weight="700" letter-spacing="0.78">
+    <text clip-path="url(#r0)" x="230.32" y="41.17">//Sinpol Design   //Sinpol Design   //Sinpol Design   //Sinpol Design</text>
+    <text clip-path="url(#r1)" x="474.79" y="342.53">//Sinpol Design   //Sinpol Design   //Sinpol Design   //Sinpol Design</text>
+    <text clip-path="url(#r2)" x="219.19" y="352.84">//Sinpol Design   //Sinpol Design   //Sinpol Design   //Sinpol Design</text>
+    <text clip-path="url(#r3)" x="35.03" y="419.62">//Sinpol Design   //Sinpol Design   //Sinpol Design   //Sinpol Design</text>
+  </g>
+</svg>

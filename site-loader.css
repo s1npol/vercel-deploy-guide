@@ -1,0 +1,318 @@
+.site-loading {
+  overflow: hidden !important;
+}
+
+.site-loading .portfolio-graft {
+  visibility: hidden;
+}
+
+.site-loading.site-prepared .portfolio-graft {
+  visibility: visible;
+}
+
+.site-loader {
+  --loader-progress: 0;
+  --loader-sweep: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  isolation: isolate;
+  color: #e8edf4;
+  background: #020713;
+  opacity: 1;
+  visibility: visible;
+  will-change: opacity;
+  transition:
+    opacity .92s cubic-bezier(.22, 1, .36, 1),
+    visibility 0s linear .92s;
+}
+
+.site-loader::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: radial-gradient(circle at 64% 50%, rgba(38, 78, 255, .12), rgba(2, 7, 19, .44) 58%, rgba(2, 7, 19, .72));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .7s cubic-bezier(.22, 1, .36, 1);
+}
+
+.site-loader.is-complete::after {
+  opacity: .18;
+}
+
+.site-loader.is-leaving {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.site-loader.is-leaving::after {
+  opacity: 0;
+}
+
+.site-loader__scene,
+.site-loader__scene > canvas {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.site-loader__scene {
+  z-index: 0;
+  opacity: 1;
+}
+
+.site-loader__shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 67% 52%, rgba(14, 68, 255, .09), transparent 29%),
+    linear-gradient(90deg, rgba(1, 4, 12, .14), transparent 24%, transparent 76%, rgba(1, 4, 12, .18)),
+    linear-gradient(180deg, rgba(1, 4, 12, .08), transparent 48%, rgba(1, 4, 12, .22));
+}
+
+.site-loader__ghost {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  width: 100%;
+  overflow: hidden;
+  color: rgba(171, 184, 207, .055);
+  font-family: "TWK Everett", "TWKEverett", Arial, sans-serif;
+  font-size: min(58vw, 72vh);
+  font-weight: 300;
+  line-height: .72;
+  letter-spacing: -.085em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity .75s cubic-bezier(.22, 1, .36, 1);
+  user-select: none;
+}
+
+.site-loader.is-leaving .site-loader__ghost {
+  opacity: 0;
+}
+
+.site-loader__ghost--top {
+  top: -13vh;
+}
+
+.site-loader__ghost--bottom {
+  bottom: -23vh;
+}
+
+.site-loader__field-frame {
+  position: absolute;
+  z-index: 2;
+  top: 29.2%;
+  left: 4%;
+  width: 92%;
+  height: 43.2%;
+  box-sizing: border-box;
+  border: 1px solid rgba(177, 185, 200, .34);
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity .75s cubic-bezier(.22, 1, .36, 1);
+}
+
+.site-loader.is-leaving .site-loader__field-frame {
+  opacity: 0;
+}
+
+.site-loader__field-frame::before,
+.site-loader__field-frame::after {
+  content: "";
+  position: absolute;
+  background: rgba(190, 198, 212, .35);
+}
+
+.site-loader__field-frame::before {
+  top: 50%;
+  right: -18px;
+  left: -18px;
+  height: 1px;
+  opacity: .12;
+}
+
+.site-loader__field-frame::after {
+  top: -18px;
+  bottom: -18px;
+  left: 50%;
+  width: 1px;
+  opacity: .1;
+}
+
+.site-loader__ui {
+  position: absolute;
+  inset: clamp(22px, 3vw, 48px);
+  z-index: 4;
+  font-family: "TWK Everett Mono", "TWKEverettMono", "Courier New", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity .7s cubic-bezier(.22, 1, .36, 1);
+}
+
+.site-loader.is-leaving .site-loader__ui {
+  opacity: 0;
+}
+
+.site-loader__brand,
+.site-loader__status-label,
+.site-loader__serial {
+  position: absolute;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.site-loader__brand {
+  top: 0;
+  left: 24px;
+  color: rgba(238, 242, 248, .86);
+}
+
+.site-loader__brand span {
+  color: rgba(238, 242, 248, .56);
+}
+
+.site-loader__status-label {
+  bottom: 0;
+  left: 24px;
+  color: rgba(224, 230, 240, .42);
+}
+
+.site-loader__serial {
+  right: 24px;
+  bottom: 0;
+  color: rgba(238, 242, 248, .72);
+  font-size: 16px;
+  letter-spacing: .04em;
+}
+
+.site-loader__progress {
+  position: absolute;
+  z-index: 4;
+  top: calc(72.4% - 35px);
+  left: calc(88% - (var(--loader-sweep) * .76%));
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: max-content;
+  color: rgba(229, 234, 242, .78);
+  font-family: "TWK Everett Mono", "TWKEverettMono", "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: .045em;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  opacity: 1;
+  pointer-events: none;
+  transition:
+    opacity .58s cubic-bezier(.22, 1, .36, 1),
+    transform .75s cubic-bezier(.22, 1, .36, 1),
+    left .18s cubic-bezier(.22, 1, .36, 1);
+}
+
+.site-loader.is-complete .site-loader__progress-marker {
+  background: #86c8ff;
+  box-shadow: 0 0 16px rgba(43, 96, 255, .78);
+}
+
+.site-loader.is-leaving .site-loader__progress {
+  opacity: 0;
+  transform: translate(-50%, -8px);
+}
+
+.site-loader__progress-label {
+  color: rgba(210, 218, 231, .64);
+}
+
+.site-loader__progress-marker {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  background: #f3f6fb;
+  box-shadow: 0 0 10px rgba(43, 96, 255, .58);
+}
+
+.site-loader__percent {
+  color: #dfe6f1;
+}
+
+.site-loader__progress-total {
+  color: rgba(210, 218, 231, .64);
+}
+
+@media (max-width: 700px) {
+  .site-loader__ghost {
+    font-size: min(94vw, 50vh);
+  }
+
+  .site-loader__ghost--top {
+    top: 2vh;
+  }
+
+  .site-loader__ghost--bottom {
+    bottom: 1vh;
+  }
+
+  .site-loader__field-frame {
+    top: 30.5%;
+    left: 5.5%;
+    width: 89%;
+    height: 39%;
+  }
+
+  .site-loader__brand {
+    left: 0;
+  }
+
+  .site-loader__status-label {
+    left: 0;
+    max-width: 58vw;
+    line-height: 1.35;
+  }
+
+  .site-loader__serial {
+    right: 0;
+  }
+
+  .site-loader__progress {
+    top: calc(69.5% - 28px);
+    left: calc(80% - (var(--loader-sweep) * .6%));
+    gap: 7px;
+    font-size: 10px;
+  }
+
+  .site-loader__progress-marker {
+    width: 7px;
+    height: 7px;
+    flex-basis: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-loader {
+    transition-duration: .35s;
+  }
+
+  .site-loader__scene,
+  .site-loader__ghost,
+  .site-loader__field-frame,
+  .site-loader__ui,
+  .site-loader__progress {
+    transition-duration: .25s;
+  }
+}

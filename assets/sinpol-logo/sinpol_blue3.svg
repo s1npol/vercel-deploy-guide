@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="532" height="666" viewBox="0 0 532 666" fill="none">
+  <defs>
+    <clipPath id="r0"><rect x="207.09" y="135.01" width="10.82" height="8.45"/></clipPath>
+    <filter id="soften" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.18"/></filter>
+  </defs>
+  <g fill="#298DFF" opacity="0.72" filter="url(#soften)" font-family="TWK Everett Mono, IBM Plex Mono, Consolas, monospace" font-size="7.35" font-weight="700" letter-spacing="0.78">
+    <text clip-path="url(#r0)" x="207.09" y="141.36">//Sinpol Design   //Sinpol Design   //Sinpol Design   //Sinpol Design</text>
+  </g>
+</svg>

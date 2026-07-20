@@ -1,0 +1,33 @@
+# Local backups and visual QA evidence
+_backups/
+qa-*/
+frames/
+*-reference.mp4
+release/
+dist/
+node_modules/
+.vercel/
+.env*.local
+
+# Source-only pages and local tooling
+_sui-original.html
+video-inspect.html
+serve-*.cjs
+qa-*.cjs
+design-qa.md
+typography-inventory.md
+TYPOGRAPHY_GUIDELINES.md
+figma-typography-library-state.json
+Sui Intro Loader Recreation.html
+
+# Retained local masters; optimized WebP files are the production assets
+projects/food-container/assets/daily-lunch-case/internal-layout.png
+projects/food-container/assets/daily-lunch-case/internal-boxes.png
+
+# Local preview logs
+_server-*.log
+server-*.log
+
+# Editor and operating-system metadata
+.DS_Store
+Thumbs.db
