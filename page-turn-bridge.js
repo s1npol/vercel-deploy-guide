@@ -38,6 +38,7 @@
     transitionRun: 0,
     lastWheelAt: 0,
     suppressBoundaryUntil: 0,
+    forwardRetryCount: 0,
     trace: [],
   };
 
@@ -87,38 +88,66 @@
     };
   };
 
-  const getScrollEngine = () =>
-    window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+  const getScrollEngine = () => {
+    const candidate =
+      window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+    return candidate && typeof candidate.scrollTo === "function"
+      ? candidate
+      : null;
+  };
+
+  const requestRuntimeAlignment = (direction) => {
+    const detail = {
+      direction,
+      immediate: true,
+      handled: false,
+    };
+    window.dispatchEvent(new CustomEvent("pg-page-turn-align-request", {
+      detail,
+    }));
+    return detail.handled;
+  };
 
   const alignExperience = () => {
     const target =
+      document.querySelector("[scrollto-lenis]") ||
       document.querySelector("#pg-experience") ||
       document.querySelector(".timeline_wrapper");
     if (!target) return;
-    const navHeight = document.querySelector(".pg-nav")?.getBoundingClientRect().height || 0;
+    state.suppressBoundaryUntil = performance.now() + 520;
+    if (requestRuntimeAlignment("forward")) return;
     const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
     const top = Math.max(
       0,
-      Math.min(target.getBoundingClientRect().top + window.scrollY - navHeight, maxScroll),
+      Math.min(target.getBoundingClientRect().top + window.scrollY + 100, maxScroll),
     );
     const engine = getScrollEngine();
-    state.suppressBoundaryUntil = performance.now() + 420;
     engine?.start?.();
     if (engine?.scrollTo) engine.scrollTo(top, { immediate: true, force: true });
     else window.scrollTo(0, top);
   };
 
   const alignProfile = () => {
-    const target = document.querySelector("[home-trigger]");
+    const mobile = window.innerWidth <= 768;
+    const target = mobile
+      ? document.querySelector("[back-to-lenis]")
+      : (
+        document.querySelector(".home-tabs_layout") ||
+        document.querySelector("[home-trigger]")
+      );
     if (!target) return;
-    const navHeight = document.querySelector(".pg-nav")?.getBoundingClientRect().height || 0;
+    state.suppressBoundaryUntil = performance.now() + 520;
+    if (requestRuntimeAlignment("reverse")) return;
     const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const targetRect = target.getBoundingClientRect();
+    const targetTop = mobile
+      ? targetRect.top + window.scrollY + targetRect.height - window.innerHeight
+      : targetRect.top + window.scrollY;
     const top = Math.max(
       0,
-      Math.min(target.getBoundingClientRect().top + window.scrollY - navHeight, maxScroll),
+      Math.min(targetTop, maxScroll),
     );
     const engine = getScrollEngine();
-    state.suppressBoundaryUntil = performance.now() + 420;
     engine?.start?.();
     if (engine?.scrollTo) engine.scrollTo(top, { immediate: true, force: true });
     else window.scrollTo(0, top);
@@ -291,13 +320,61 @@
       }, `+=${needsEntry ? 0.08 : 0}`);
   };
 
-  const startForwardWatchdog = (expectedRun) => {
+  const requestOriginalForwardRetry = (expectedRun) => {
+    if (state.forwardRetryCount > 0) return false;
+    const detail = {
+      direction: "forward",
+      run: expectedRun,
+      handled: false,
+    };
+    window.dispatchEvent(new CustomEvent("pg-page-turn-restart-request", {
+      detail,
+    }));
+    if (!detail.handled) return false;
+    state.forwardRetryCount += 1;
+    emit("forward", "sequence-retry");
+    return true;
+  };
+
+  const hasForwardProgress = (baseline, latest) => {
+    if (!baseline || !latest) return false;
+    const distance = Math.abs(latest.canvasTop - baseline.canvasTop);
+    return (
+      distance > latest.viewportHeight * 0.08 ||
+      latest.headingOpacity > baseline.headingOpacity + 0.04
+    );
+  };
+
+  const startForwardWatchdog = (
+    expectedRun,
+    baseline = readVisualState(),
+    isRetry = false,
+  ) => {
     clearForwardWatchdog();
+    if (isRetry) {
+      state.forwardWatchdog = window.setTimeout(() => {
+        if (expectedRun !== state.transitionRun || state.intent !== "forward") return;
+        if (state.phase !== "forward") return;
+        const latest = readVisualState();
+        if (
+          latest.canvasTop > -latest.viewportHeight * 0.55 ||
+          latest.headingOpacity <= 0.08
+        ) {
+          rescueForward("sequence-retry-timeout", expectedRun);
+        }
+      }, 4800);
+      return;
+    }
+
     state.forwardWatchdog = window.setTimeout(() => {
       if (expectedRun !== state.transitionRun || state.intent !== "forward") return;
       if (state.phase !== "forward") return;
       const visual = readVisualState();
-      if (visual.canvasTop > visual.viewportHeight * 0.72) {
+      if (!hasForwardProgress(baseline, visual)) {
+        if (requestOriginalForwardRetry(expectedRun)) {
+          startForwardWatchdog(expectedRun, readVisualState(), true);
+          return;
+        }
         rescueForward("canvas-entry-stall", expectedRun);
         return;
       }
@@ -312,8 +389,8 @@
         ) {
           rescueForward("sequence-settle-stall", expectedRun);
         }
-      }, 3500);
-    }, 700);
+      }, 3600);
+    }, 1450);
   };
 
   const monitor = (direction, expectedRun) => {
@@ -370,6 +447,7 @@
     state.lastForwardAt = now;
     state.intent = "forward";
     const expectedRun = ++state.transitionRun;
+    state.forwardRetryCount = 0;
     stopMonitor();
     clearForwardWatchdog();
     state.rescueTimeline?.kill?.();
@@ -380,9 +458,10 @@
     }
     emit("forward", "request");
     try {
+      const baseline = readVisualState();
       callback?.apply(context, args);
       monitor("forward", expectedRun);
-      startForwardWatchdog(expectedRun);
+      startForwardWatchdog(expectedRun, baseline);
       return true;
     } catch (error) {
       root.dataset.pgPageTurnError = error instanceof Error ? error.message : String(error);
