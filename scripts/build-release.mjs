@@ -59,6 +59,7 @@ const forbiddenContent = [
   'api_key',
   'cdn.prod.website-files.com',
   'res.cloudinary.com',
+  'd8j0ntlcm91z4.cloudfront.net',
 ]
 
 const forbiddenPatterns = [

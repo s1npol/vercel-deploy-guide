@@ -11,4 +11,4 @@ This portfolio is a static site. The following libraries are vendored locally so
 
 The Experience image sequence is served from `scraped-assets/transition/homepage-scroll/` rather than Cloudinary. Review licenses and update versions deliberately; do not replace these files from an unverified source.
 
-The first project page also uses Google Fonts stylesheets and one CloudFront-hosted opening film. All remaining project imagery and runtime scripts are local. These two network dependencies should be checked after every production deployment.
+The first project page uses Google Fonts stylesheets. Its opening film, project imagery, and runtime scripts are local. The font dependency should be checked after every production deployment.

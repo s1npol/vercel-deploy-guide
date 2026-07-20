@@ -18,6 +18,6 @@ The public site intentionally includes a work email address. A personal phone nu
 
 `serve-8793.cjs` is for source development and `npm run preview` serves the production `dist/` build. Both bind to `127.0.0.1` only and must not be exposed through a public tunnel.
 
-## External media
+## Media
 
-The first project page streams its opening film from a read-only CloudFront URL. No credential or user identifier is sent by the site. Availability of that film still depends on the external host; move it into `projects/food-container/assets/` later if fully self-contained hosting is required.
+The first project page serves its optimized opening film from `projects/food-container/assets/`. The production build rejects the retired CloudFront hostname so that dependency cannot be reintroduced accidentally.
