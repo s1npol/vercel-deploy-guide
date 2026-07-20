@@ -388,6 +388,33 @@
     window.ScrollTrigger.create = bridgedCreate;
   }
 
+  let lastObservedScrollY = window.scrollY;
+  let boundaryFrame = 0;
+  window.addEventListener("scroll", () => {
+    const currentScrollY = window.scrollY;
+    const movingDown = currentScrollY > lastObservedScrollY + 0.5;
+    lastObservedScrollY = currentScrollY;
+    if (!movingDown || boundaryFrame) return;
+    if (
+      root.dataset.pgNavJumpLock === "true" ||
+      root.dataset.pgContactJumpLock === "true"
+    ) {
+      return;
+    }
+    if (state.phase !== "before" && state.phase !== "ready") return;
+
+    boundaryFrame = requestAnimationFrame(() => {
+      boundaryFrame = 0;
+      if (state.phase !== "before" && state.phase !== "ready") return;
+      const trigger = document.querySelector("[home-trigger]");
+      if (!trigger || typeof state.forward !== "function") return;
+      const rect = trigger.getBoundingClientRect();
+      if (rect.top < 0 && rect.bottom <= window.innerHeight + 2) {
+        state.forward();
+      }
+    });
+  }, { passive: true });
+
   window.__portfolioPageTurn = {
     getState() {
       return state.phase;
