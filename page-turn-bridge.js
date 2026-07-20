@@ -3,6 +3,27 @@
   window.__portfolioPageTurnBridgeReady = true;
 
   const root = document.documentElement;
+  const canvasContextPrototype = window.CanvasRenderingContext2D?.prototype;
+  if (
+    canvasContextPrototype?.drawImage &&
+    !canvasContextPrototype.drawImage.__pgBrokenImageGuard
+  ) {
+    const originalDrawImage = canvasContextPrototype.drawImage;
+    const guardedDrawImage = function (source) {
+      const brokenImage =
+        source instanceof HTMLImageElement &&
+        source.complete &&
+        (!source.naturalWidth || !source.naturalHeight);
+      if (brokenImage) {
+        root.dataset.pgSequenceFrameSkipped = "true";
+        return;
+      }
+      return originalDrawImage.apply(this, arguments);
+    };
+    guardedDrawImage.__pgBrokenImageGuard = true;
+    canvasContextPrototype.drawImage = guardedDrawImage;
+  }
+
   const state = {
     phase: "unbound",
     forward: null,
@@ -11,11 +32,22 @@
     monitorRun: 0,
     lastForwardAt: 0,
     lastReverseAt: 0,
+    forwardWatchdog: 0,
+    rescueTimeline: null,
+  };
+
+  const clearForwardWatchdog = () => {
+    window.clearTimeout(state.forwardWatchdog);
+    state.forwardWatchdog = 0;
   };
 
   const emit = (phase, source = "legacy") => {
     state.phase = phase;
     root.dataset.pgPageTurnState = phase;
+    if (phase === "before" || phase === "after") {
+      clearForwardWatchdog();
+      delete root.dataset.pgPageTurnError;
+    }
     window.dispatchEvent(new CustomEvent("portfolio:page-turn-state", {
       detail: { phase, source },
     }));
@@ -44,10 +76,194 @@
     };
   };
 
+  const getScrollEngine = () =>
+    window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+
+  const alignExperience = () => {
+    const target =
+      document.querySelector("#pg-experience") ||
+      document.querySelector(".timeline_wrapper");
+    if (!target) return;
+    const navHeight = document.querySelector(".pg-nav")?.getBoundingClientRect().height || 0;
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const top = Math.max(
+      0,
+      Math.min(target.getBoundingClientRect().top + window.scrollY - navHeight, maxScroll),
+    );
+    const engine = getScrollEngine();
+    engine?.start?.();
+    if (engine?.scrollTo) engine.scrollTo(top, { immediate: true, force: true });
+    else window.scrollTo(0, top);
+  };
+
+  const revealExperience = (immediate = false) => {
+    const heading = document.querySelector(".timeline_heading");
+    const columns = document.querySelectorAll(".timeline_colum_left");
+    const progress = document.querySelectorAll(
+      ".timeline_progress_main, .timeline_progress",
+    );
+    const gsap = window.gsap;
+
+    if (!gsap) {
+      if (heading) {
+        heading.style.opacity = "1";
+        heading.style.transform = "none";
+      }
+      columns.forEach((column) => {
+        column.style.opacity = "1";
+        column.style.transform = "none";
+      });
+      progress.forEach((element) => {
+        element.style.opacity = "1";
+      });
+      return;
+    }
+
+    const duration = immediate ? 0 : 0.52;
+    if (heading) {
+      gsap.to(heading, {
+        y: "0%",
+        scale: 1,
+        opacity: 1,
+        duration,
+        ease: "power3.out",
+        overwrite: true,
+      });
+    }
+    if (columns.length) {
+      gsap.to(columns, {
+        y: "0%",
+        opacity: 1,
+        duration,
+        stagger: immediate ? 0 : 0.045,
+        ease: "power3.out",
+        overwrite: true,
+      });
+    }
+    if (progress.length) {
+      gsap.to(progress, {
+        opacity: 1,
+        duration: immediate ? 0 : 0.4,
+        overwrite: true,
+      });
+    }
+  };
+
   const stopMonitor = () => {
     if (state.monitorFrame) cancelAnimationFrame(state.monitorFrame);
     state.monitorFrame = 0;
     state.monitorRun += 1;
+  };
+
+  const settleAfterInstant = (source = "fallback", shouldAlign = false) => {
+    stopMonitor();
+    clearForwardWatchdog();
+    state.rescueTimeline?.kill?.();
+    state.rescueTimeline = null;
+    const canvas = document.querySelector("#canvasPin");
+    const gsap = window.gsap;
+
+    if (gsap && canvas) {
+      gsap.killTweensOf(canvas);
+      gsap.set(canvas, { position: "fixed", y: "-100%", opacity: 1 });
+    } else if (canvas) {
+      canvas.style.transform = "translate3d(0, -100%, 0)";
+      canvas.style.opacity = "1";
+    }
+    revealExperience(true);
+    getScrollEngine()?.start?.();
+    if (shouldAlign) alignExperience();
+    window.ScrollTrigger?.refresh?.();
+    emit("after", source);
+  };
+
+  const settleBeforeInstant = (source = "fallback") => {
+    stopMonitor();
+    clearForwardWatchdog();
+    state.rescueTimeline?.kill?.();
+    state.rescueTimeline = null;
+    const canvas = document.querySelector("#canvasPin");
+    const gsap = window.gsap;
+
+    if (gsap && canvas) {
+      gsap.killTweensOf(canvas);
+      gsap.set(canvas, { position: "fixed", y: "99.26svh", opacity: 1 });
+    } else if (canvas) {
+      canvas.style.transform = "translate3d(0, 99.26svh, 0)";
+      canvas.style.opacity = "1";
+    }
+    getScrollEngine()?.start?.();
+    emit("before", source);
+  };
+
+  const rescueForward = (source = "stalled") => {
+    if (state.phase === "after" || state.phase === "forward-recovery") return;
+    stopMonitor();
+    clearForwardWatchdog();
+
+    const canvas = document.querySelector("#canvasPin");
+    const gsap = window.gsap;
+    const engine = getScrollEngine();
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    emit("forward-recovery", source);
+
+    if (!canvas || !gsap || reducedMotion) {
+      settleAfterInstant("recovery-instant", true);
+      return;
+    }
+
+    state.rescueTimeline?.kill?.();
+    gsap.killTweensOf(canvas);
+    const visual = readVisualState();
+    const needsEntry = visual.canvasTop > visual.viewportHeight * 0.36;
+    const entryDuration = needsEntry ? 0.48 : 0.08;
+    revealExperience(false);
+
+    state.rescueTimeline = gsap.timeline({
+      defaults: { overwrite: true },
+      onComplete: () => {
+        state.rescueTimeline = null;
+        engine?.start?.();
+        alignExperience();
+        window.ScrollTrigger?.refresh?.();
+        emit("after", "recovery-complete");
+      },
+    });
+    state.rescueTimeline
+      .set(canvas, { position: "fixed", opacity: 1 })
+      .to(canvas, {
+        y: "0svh",
+        duration: entryDuration,
+        ease: "power3.out",
+      })
+      .to(canvas, {
+        y: "-100%",
+        duration: 0.72,
+        ease: "power3.inOut",
+      }, `+=${needsEntry ? 0.08 : 0}`);
+  };
+
+  const startForwardWatchdog = () => {
+    clearForwardWatchdog();
+    state.forwardWatchdog = window.setTimeout(() => {
+      if (state.phase !== "forward") return;
+      const visual = readVisualState();
+      if (visual.canvasTop > visual.viewportHeight * 0.72) {
+        rescueForward("canvas-entry-stall");
+        return;
+      }
+
+      state.forwardWatchdog = window.setTimeout(() => {
+        if (state.phase !== "forward") return;
+        const latest = readVisualState();
+        if (
+          latest.canvasTop > -latest.viewportHeight * 0.55 ||
+          latest.headingOpacity <= 0.08
+        ) {
+          rescueForward("sequence-settle-stall");
+        }
+      }, 3500);
+    }, 700);
   };
 
   const monitor = (direction) => {
@@ -72,7 +288,8 @@
 
       if (now - startedAt >= timeout) {
         state.monitorFrame = 0;
-        emit(direction === "forward" ? "forward-timeout" : "reverse-timeout", "timeout");
+        if (direction === "forward") rescueForward("monitor-timeout");
+        else settleBeforeInstant("reverse-timeout");
         return;
       }
 
@@ -90,10 +307,14 @@
     try {
       callback?.apply(context, args);
       monitor("forward");
+      startForwardWatchdog();
       return true;
     } catch (error) {
+      root.dataset.pgPageTurnError = error instanceof Error ? error.message : String(error);
+      console.warn("[portfolio] legacy page turn failed; using visual recovery", error);
       emit("forward-error", "exception");
-      return false;
+      requestAnimationFrame(() => rescueForward("legacy-error"));
+      return true;
     }
   };
 
@@ -103,12 +324,16 @@
     state.lastReverseAt = now;
     emit("reverse", "request");
     try {
+      clearForwardWatchdog();
       callback?.apply(context, args);
       monitor("reverse");
       return true;
     } catch (error) {
+      root.dataset.pgPageTurnError = error instanceof Error ? error.message : String(error);
+      console.warn("[portfolio] legacy reverse page turn failed; restoring Profile", error);
       emit("reverse-error", "exception");
-      return false;
+      requestAnimationFrame(() => settleBeforeInstant("reverse-error"));
+      return true;
     }
   };
 
@@ -188,35 +413,10 @@
       return state.phase;
     },
     settleAfter() {
-      stopMonitor();
-      const canvas = document.querySelector("#canvasPin");
-      const heading = document.querySelector(".timeline_heading");
-      const columns = document.querySelectorAll(".timeline_colum_left");
-      const progress = document.querySelectorAll(".timeline_progress_main, .timeline_progress");
-      const engine =
-        window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
-
-      if (window.gsap && canvas) {
-        window.gsap.killTweensOf(canvas);
-        window.gsap.set(canvas, { y: "-100%", opacity: 1 });
-        if (heading) window.gsap.set(heading, { y: "0%", scale: 1, opacity: 1 });
-        if (columns.length) window.gsap.set(columns, { y: "0%", opacity: 1 });
-        if (progress.length) window.gsap.set(progress, { opacity: 1 });
-      }
-      engine?.start?.();
-      emit("after", "fallback");
+      settleAfterInstant("fallback");
     },
     settleBefore() {
-      stopMonitor();
-      const canvas = document.querySelector("#canvasPin");
-      const engine =
-        window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
-      if (window.gsap && canvas) {
-        window.gsap.killTweensOf(canvas);
-        window.gsap.set(canvas, { position: "fixed", y: "99.26svh", opacity: 1 });
-      }
-      engine?.start?.();
-      emit("before", "fallback");
+      settleBeforeInstant("fallback");
     },
   };
 })();
