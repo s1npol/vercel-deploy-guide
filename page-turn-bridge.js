@@ -482,27 +482,36 @@
 
   let lastObservedScrollY = window.scrollY;
   let boundaryFrame = 0;
+  let pendingBoundaryDirection = null;
   window.addEventListener("scroll", () => {
     const currentScrollY = window.scrollY;
     const movingDown = currentScrollY > lastObservedScrollY + 0.5;
     const movingUp = currentScrollY < lastObservedScrollY - 0.5;
     lastObservedScrollY = currentScrollY;
-    if ((!movingDown && !movingUp) || boundaryFrame) return;
-    if (performance.now() < state.suppressBoundaryUntil) return;
+    if (!movingDown && !movingUp) return;
+    pendingBoundaryDirection = movingDown ? "down" : "up";
+    if (performance.now() < state.suppressBoundaryUntil) {
+      pendingBoundaryDirection = null;
+      return;
+    }
     if (
       root.dataset.pgNavJumpLock === "true" ||
       root.dataset.pgContactJumpLock === "true"
     ) {
+      pendingBoundaryDirection = null;
       return;
     }
+    if (boundaryFrame) return;
     boundaryFrame = requestAnimationFrame(() => {
       boundaryFrame = 0;
-      if (performance.now() < state.suppressBoundaryUntil) return;
+      const direction = pendingBoundaryDirection;
+      pendingBoundaryDirection = null;
+      if (!direction || performance.now() < state.suppressBoundaryUntil) return;
       const trigger = document.querySelector("[home-trigger]");
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
       if (
-        movingDown &&
+        direction === "down" &&
         (state.phase === "before" || state.phase === "ready") &&
         typeof state.forward === "function" &&
         rect.top < 0 &&
@@ -510,7 +519,7 @@
       ) {
         state.forward();
       } else if (
-        movingUp &&
+        direction === "up" &&
         state.phase === "after" &&
         typeof state.reverse === "function" &&
         rect.top >= -2
