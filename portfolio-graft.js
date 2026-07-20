@@ -692,6 +692,7 @@
     const nav = document.querySelector(".pg-nav");
     if (!nav || nav.dataset.sectionNavReady === "true") return;
     nav.dataset.sectionNavReady = "true";
+    window.__portfolioNavRequestId = Number(window.__portfolioNavRequestId) || 0;
 
     const profile =
       document.querySelector(".home-tabs_layout") ||
@@ -729,27 +730,6 @@
       if (engine?.scrollTo) engine.scrollTo(top, { immediate: true, force: true });
       else window.scrollTo(0, top);
     };
-
-    const waitFor = (test, timeout, runIsCurrent) =>
-      new Promise((resolve) => {
-        const startedAt = performance.now();
-        const step = (now) => {
-          if (!runIsCurrent()) {
-            resolve(false);
-            return;
-          }
-          if (test()) {
-            resolve(true);
-            return;
-          }
-          if (now - startedAt >= timeout) {
-            resolve(false);
-            return;
-          }
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      });
 
     const restoreSelectedWorkReturn = () => {
       if (window.location.hash !== "#pg-selected-work" || !selectedWork) return;
@@ -820,43 +800,38 @@
 
     restoreSelectedWorkReturn();
 
-    let navPhase = "idle";
-    let pendingSelector = "";
-    let navRunId = 0;
-    let finishedRunId = 0;
-    let navSafetyTimer = 0;
-
-    const runIsCurrent = (runId) => runId === navRunId;
-    const getPageTurn = () => window.__portfolioPageTurn;
-
-    const updateNavState = (phase, selector = "") => {
-      navPhase = phase;
-      nav.setAttribute("aria-busy", phase === "idle" ? "false" : "true");
-      document.documentElement.dataset.pgNavPhase = phase;
-      if (selector) document.documentElement.dataset.pgNavRequestedTarget = selector;
-      links.forEach((link) => {
-        const requested = link.dataset.pgNavTarget === selector;
-        link.classList.toggle("is-pending", phase !== "idle" && requested);
-        if (phase !== "idle") link.removeAttribute("aria-current");
-      });
-    };
-
-    const markActive = (selector) => {
-      links.forEach((link) => {
-        link.classList.remove("is-pending");
-        if (link.dataset.pgNavTarget === selector) {
-          link.setAttribute("aria-current", "page");
-        } else {
-          link.removeAttribute("aria-current");
-        }
-      });
-    };
-
-    const glideTo = (section, runId, duration = 700) =>
-      new Promise((resolve) => {
+    const cancelActiveGlide = () => {
       window.cancelAnimationFrame(window.__portfolioNavGlideRaf);
-      window.cancelAnimationFrame(window.__portfolioContactGlideRaf);
+      window.__portfolioNavGlideRaf = 0;
       window.clearTimeout(window.__pgNavJumpLockTimer);
+      window.__portfolioNavGlideResolve?.(false);
+      delete window.__portfolioNavGlideResolve;
+      delete document.documentElement.dataset.pgNavJumpLock;
+    };
+
+    const waitForPageTurnBoundary = (requestId) =>
+      new Promise((resolve) => {
+        const startedAt = performance.now();
+        const step = (now) => {
+          if (requestId !== window.__portfolioNavRequestId) {
+            resolve(false);
+            return;
+          }
+
+          const nativeTurn = document.documentElement.dataset.pgNativeTurn;
+          const transitionActive = nativeTurn === "forward" || nativeTurn === "reverse";
+          if (!transitionActive || now - startedAt >= 5200) {
+            resolve(true);
+            return;
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+
+    const glideTo = (section, requestId) => new Promise((resolve) => {
+      cancelActiveGlide();
+      window.cancelAnimationFrame(window.__portfolioContactGlideRaf);
       window.clearTimeout(window.__pgContactJumpLockTimer);
       delete document.documentElement.dataset.pgContactJumpLock;
       document.documentElement.dataset.pgNavJumpLock = "true";
@@ -874,28 +849,40 @@
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       let completed = false;
 
+      const finish = (success) => {
+        if (window.__portfolioNavGlideResolve === finish) {
+          delete window.__portfolioNavGlideResolve;
+        }
+        resolve(success);
+      };
+      window.__portfolioNavGlideResolve = finish;
+
       const complete = (success = true) => {
         if (completed) return;
         completed = true;
         window.clearTimeout(window.__pgNavJumpLockTimer);
-        if (success && runIsCurrent(runId)) {
-          setScroll(scrollEngine, getTargetTop(section));
-          window.dispatchEvent(new CustomEvent("portfolio:nav-glide-complete", {
-            detail: { target: `#${section.id}` },
-          }));
+        if (!success || requestId !== window.__portfolioNavRequestId) {
+          finish(false);
+          return;
         }
-        resolve(success && runIsCurrent(runId));
+        setScroll(scrollEngine, getTargetTop(section));
+        delete document.documentElement.dataset.pgNavJumpLock;
+        window.dispatchEvent(new CustomEvent("portfolio:nav-glide-complete", {
+          detail: { target: `#${section.id}` },
+        }));
+        finish(true);
       };
 
-      if (reducedMotion || duration <= 0 || Math.abs(distance) < 2) {
+      if (reducedMotion || Math.abs(distance) < 2) {
         setScroll(scrollEngine, destination);
         complete();
         return;
       }
 
+      const duration = 750;
       const startedAt = performance.now();
       const step = (now) => {
-        if (!runIsCurrent(runId)) {
+        if (requestId !== window.__portfolioNavRequestId) {
           window.__portfolioNavGlideRaf = 0;
           complete(false);
           return;
@@ -911,136 +898,42 @@
         complete();
       };
       window.__portfolioNavGlideRaf = requestAnimationFrame(step);
-      window.__pgNavJumpLockTimer = window.setTimeout(complete, duration + 420);
+      window.__pgNavJumpLockTimer = window.setTimeout(complete, 1100);
     });
 
-    const ensurePageTurn = async (expected, runId) => {
-      const current = () => runIsCurrent(runId);
-      await waitFor(() => getPageTurn()?.isReady?.(), 2800, current);
-      if (!current()) return false;
-
-      const bridge = getPageTurn();
-      if (!bridge) return false;
-      bridge.sync?.();
-      if (bridge.getState?.() === expected) return true;
-
-      const started =
-        expected === "after"
-          ? bridge.forward?.()
-          : bridge.reverse?.();
-      if (!started && bridge.getState?.() === expected) return true;
-
-      const settled = await waitFor(
-        () => bridge.getState?.() === expected,
-        expected === "after" ? 7800 : 6800,
-        current,
-      );
-      if (settled || !current()) return settled;
-
-      if (expected === "after") bridge.settleAfter?.();
-      else bridge.settleBefore?.();
-      return waitFor(() => bridge.getState?.() === expected, 900, current);
-    };
-
-    const performNavigation = async (selector, runId) => {
-      const section = document.querySelector(selector);
-      if (!section || !runIsCurrent(runId)) return false;
-
-      const expectedPageTurn = selector === profileSelector ? "before" : "after";
-      const pageTurnSettled = await ensurePageTurn(expectedPageTurn, runId);
-      if (!runIsCurrent(runId)) return false;
-
-      if (!pageTurnSettled) {
-        const bridge = getPageTurn();
-        if (expectedPageTurn === "after") bridge?.settleAfter?.();
-        else bridge?.settleBefore?.();
-      }
-
-      const duration =
-        selector === profileSelector
-          ? 620
-          : selector === "#pg-experience"
-            ? 680
-            : 720;
-      return glideTo(section, runId, duration);
-    };
-
-    const finishNavigation = (selector, runId) => {
-      if (!runIsCurrent(runId) || finishedRunId === runId) return;
-      finishedRunId = runId;
-      window.clearTimeout(navSafetyTimer);
-      window.clearTimeout(window.__pgNavJumpLockTimer);
-      delete document.documentElement.dataset.pgNavJumpLock;
-      delete document.documentElement.dataset.pgNavPendingTarget;
-      updateNavState("idle", selector);
-      markActive(selector);
-      window.dispatchEvent(new CustomEvent("portfolio:section-navigation-complete", {
-        detail: { target: selector },
-      }));
-
-      const nextSelector = pendingSelector;
-      pendingSelector = "";
-      if (nextSelector && nextSelector !== selector) {
-        requestAnimationFrame(() => startNavigation(nextSelector));
-      }
-    };
-
-    const hardSettleNavigation = (selector, runId) => {
-      if (!runIsCurrent(runId) || finishedRunId === runId) return Promise.resolve(false);
-      const section = document.querySelector(selector);
-      const bridge = getPageTurn();
-      if (selector === profileSelector) bridge?.settleBefore?.();
-      else bridge?.settleAfter?.();
-      if (!section) {
-        finishNavigation(selector, runId);
-        return Promise.resolve(false);
-      }
-      return glideTo(section, runId, 260).finally(() => finishNavigation(selector, runId));
-    };
-
-    function startNavigation(selector) {
-      const section = document.querySelector(selector);
-      if (!section) return;
-
-      navRunId += 1;
-      const runId = navRunId;
-      finishedRunId = 0;
-      document.documentElement.dataset.pgNavJumpLock = "true";
-      updateNavState("transitioning", selector);
-
-      window.clearTimeout(navSafetyTimer);
-      navSafetyTimer = window.setTimeout(
-        () => hardSettleNavigation(selector, runId),
-        12500,
-      );
-
-      performNavigation(selector, runId)
-        .catch(() => hardSettleNavigation(selector, runId))
-        .finally(() => finishNavigation(selector, runId));
-    }
-
-    const requestNavigation = (selector) => {
-      if (!document.querySelector(selector)) return;
-      if (navPhase !== "idle") {
-        pendingSelector = selector;
-        document.documentElement.dataset.pgNavPendingTarget = selector;
-        updateNavState("queued", selector);
-        return;
-      }
-      startNavigation(selector);
-    };
-
+    let lastSectionJump = 0;
     const activate = (event) => {
       const link = event.target?.closest?.("[data-pg-nav-target]");
       if (!link || !nav.contains(link)) return;
+      if (event.type === "pointerdown" && event.button !== 0) return;
+      if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      requestNavigation(link.dataset.pgNavTarget);
+      const now = Date.now();
+      if (now - lastSectionJump < 600) return;
+      const section = document.querySelector(link.dataset.pgNavTarget);
+      if (!section) return;
+      lastSectionJump = now;
+      const requestId = ++window.__portfolioNavRequestId;
+      cancelActiveGlide();
+      waitForPageTurnBoundary(requestId).then(async (ready) => {
+        if (!ready || requestId !== window.__portfolioNavRequestId) return;
+        const firstGlideComplete = await glideTo(section, requestId);
+        if (
+          !firstGlideComplete ||
+          requestId !== window.__portfolioNavRequestId ||
+          section !== selectedWork
+        ) return;
+        const pageTurnSettled = await waitForPageTurnBoundary(requestId);
+        if (!pageTurnSettled || requestId !== window.__portfolioNavRequestId) return;
+        await glideTo(section, requestId);
+      });
     };
 
-    updateNavState("idle");
+    nav.addEventListener("pointerdown", activate, true);
     nav.addEventListener("click", activate, true);
+    nav.addEventListener("keydown", activate, true);
   }
 
   function setupContactNavLink() {
@@ -1065,8 +958,11 @@
       const section = document.querySelector("#pg-contact-final");
       if (!section) return;
 
+      window.__portfolioNavRequestId = (Number(window.__portfolioNavRequestId) || 0) + 1;
       window.cancelAnimationFrame(window.__portfolioNavGlideRaf);
       window.clearTimeout(window.__pgNavJumpLockTimer);
+      window.__portfolioNavGlideResolve?.(false);
+      delete window.__portfolioNavGlideResolve;
       delete document.documentElement.dataset.pgNavJumpLock;
       window.clearTimeout(window.__pgContactJumpLockTimer);
       document.documentElement.dataset.pgContactJumpLock = "true";
@@ -2054,15 +1950,7 @@
     const getSnapThreshold = () => (isPhoneFrame() ? 0.74 : isCompactFrame() ? 0.44 : 0.55);
     const getResetThreshold = () => (isPhoneFrame() ? 0.14 : isCompactFrame() ? 0.24 : 0.35);
     const navigationBusy = () => {
-      const root = document.documentElement;
-      const pageTurnState = root.dataset.pgPageTurnState;
-      return (
-        root.dataset.pgNavJumpLock === "true" ||
-        root.dataset.pgNavPhase === "transitioning" ||
-        root.dataset.pgNavPhase === "queued" ||
-        pageTurnState === "forward" ||
-        pageTurnState === "reverse"
-      );
+      return document.documentElement.dataset.pgNavJumpLock === "true";
     };
 
     const getVisibleRatio = () => {

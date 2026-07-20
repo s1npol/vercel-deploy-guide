@@ -27,10 +27,8 @@ const verifyOnly = process.argv.includes('--verify-only')
 const productionFiles = [
   '.nojekyll',
   'index.html',
-  'page-turn-bridge.js',
   'portfolio-graft.css',
   'portfolio-graft.js',
-  'mobile-experience-recovery.js',
   'project-viewport-fit.css',
   'site-loader.css',
   'site-loader.js',
