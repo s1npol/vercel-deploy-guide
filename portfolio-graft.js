@@ -1439,8 +1439,6 @@
       cardLabel: item[9] || "",
       href: item[10] || ""
     }));
-    const fallbackProjectPage = projects.find((project) => project.href);
-
     const pad = (value) => String(value).padStart(2, "0");
     const splitTitle = (title) => {
       const clean = title.replace(/\s+No\.?\s*/i, " No. ");
@@ -1505,11 +1503,18 @@
 
     const renderDetail = () => {
       const project = projects[selected];
-      const destinationProject = project.href ? project : fallbackProjectPage;
+      const isPublished = Boolean(project.href);
       detailIndex.textContent = pad(selected + 1);
       detailTitle.innerHTML = splitTitle(project.title).map((line) => `<span>${line}</span>`).join("");
-      detailCta.dataset.projectHref = destinationProject?.href || "";
-      detailCta.setAttribute("aria-label", `View project: ${destinationProject?.cardTitle || project.cardTitle}`);
+      detailCta.dataset.projectHref = isPublished ? project.href : "";
+      detailCta.disabled = !isPublished;
+      detailCta.textContent = isPublished ? "VIEW PROJECT" : "COMING SOON";
+      detailCta.setAttribute(
+        "aria-label",
+        isPublished
+          ? `View project: ${project.cardTitle}`
+          : `${project.cardTitle}: project page coming soon`
+      );
       detailMeta.innerHTML = `
         <div><b>A</b><span>COMPLETED</span><br><span>${project.completed}</span></div>
         <div><b>B</b><span>TYPE</span><br><span>${project.type}</span></div>

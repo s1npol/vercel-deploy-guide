@@ -27,6 +27,10 @@ Confirm these routes:
 - `/`
 - `/projects/food-container/`
 - `/index.html#pg-selected-work`
+- every additional project route marked as published in `portfolio-graft.js`
+
+Projects without a finished case-study URL must remain `COMING SOON`; never
+point an unfinished project at another project's page.
 
 ## Vercel project
 

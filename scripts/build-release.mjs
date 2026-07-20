@@ -46,6 +46,7 @@ const releaseOnlyExcludes = [
 
 const forbiddenNames = new Set([
   '_backups',
+  'templates',
   '_sui-original.html',
   'video-inspect.html',
   'serve-8793.cjs',
@@ -56,6 +57,7 @@ const forbiddenNames = new Set([
 ])
 
 const forbiddenContent = [
+  '{{PROJECT_',
   'api_key',
   'cdn.prod.website-files.com',
   'res.cloudinary.com',

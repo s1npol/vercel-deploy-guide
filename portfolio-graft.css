@@ -1633,6 +1633,25 @@ body > .w-layout-vflex.gap-24 {
   outline-offset: 4px;
 }
 
+.pg-project__cta.boton-elegante:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  background-color: color-mix(in srgb, var(--pp-work-ink) 72%, white);
+  border-color: transparent;
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+.pg-project__cta.boton-elegante:disabled::after {
+  display: none;
+}
+
+.pg-project__cta.boton-elegante:disabled:hover {
+  background-color: color-mix(in srgb, var(--pp-work-ink) 72%, white);
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
 @keyframes pg-project-cta-ripple {
   0% {
     opacity: 0;

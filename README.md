@@ -22,3 +22,19 @@ The verified production output is generated in `dist/`. The build removes source
 - Production branch: `main`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the GitHub and Vercel handoff checklist.
+
+## Adding a case study
+
+Create a new unpublished project page from the reusable local template:
+
+```powershell
+npm run new:project -- smart-product "Smart Product"
+```
+
+Complete every `{{PROJECT_...}}` placeholder, add optimized local media under
+the generated `assets/media/` folder, and test the page before adding its URL
+to `portfolio-graft.js`. Projects without a URL remain visible in the carousel
+but their detail button reads `COMING SOON`.
+
+See [templates/project-page/README.md](templates/project-page/README.md) for the
+full publishing checklist.

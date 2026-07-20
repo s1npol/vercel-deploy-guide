@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="{{PROJECT_SUMMARY}}"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; form-action 'self'"
+    />
+    <title>{{PROJECT_TITLE}} — Sinpol Design</title>
+    <link rel="stylesheet" href="./assets/project.css" />
+    <script src="./assets/project.js" defer></script>
+  </head>
+  <body data-project-slug="{{PROJECT_SLUG}}">
+    <div class="project-intro" data-project-intro>
+      <div class="project-intro__grid" aria-hidden="true"></div>
+      <p class="project-kicker">SINPOL DESIGN / {{PROJECT_YEAR}}</p>
+      <h1>{{PROJECT_TITLE}}</h1>
+      <p class="project-intro__summary">{{PROJECT_SUMMARY}}</p>
+      <button class="project-enter" type="button" data-project-enter>
+        ENTER PROJECT
+      </button>
+    </div>
+
+    <header class="project-header" data-project-header>
+      <a class="project-brand" href="#project-home">SINPOL DESIGN</a>
+      <nav class="project-nav" aria-label="项目章节">
+        <a href="#project-home" data-project-nav>项目首页</a>
+        <a href="#background" data-project-nav>项目背景</a>
+        <a href="#process" data-project-nav>设计过程</a>
+        <a href="#outcome" data-project-nav>项目成果</a>
+      </nav>
+      <a class="project-back" href="../../index.html#pg-selected-work">
+        <span aria-hidden="true">←</span>
+        返回主页面
+      </a>
+    </header>
+
+    <main class="project-content" data-project-content>
+      <section class="project-hero project-section" id="project-home">
+        <div class="project-hero__copy">
+          <p class="project-kicker">01 / PROJECT</p>
+          <h2>{{PROJECT_TITLE}}</h2>
+          <p>{{PROJECT_SUMMARY}}</p>
+          <dl class="project-meta">
+            <div>
+              <dt>YEAR</dt>
+              <dd>{{PROJECT_YEAR}}</dd>
+            </div>
+            <div>
+              <dt>ROLE</dt>
+              <dd>{{PROJECT_ROLE}}</dd>
+            </div>
+            <div>
+              <dt>CLIENT</dt>
+              <dd>{{PROJECT_CLIENT}}</dd>
+            </div>
+          </dl>
+        </div>
+        <figure
+          class="project-placeholder project-placeholder--hero"
+          role="img"
+          aria-label="Replace with the project hero image"
+        >
+          <span>16:9 HERO IMAGE</span>
+          <small>assets/media/hero.webp</small>
+        </figure>
+      </section>
+
+      <section class="project-section project-split" id="background">
+        <div>
+          <p class="project-kicker">02 / BACKGROUND</p>
+          <h2>{{PROJECT_BACKGROUND_TITLE}}</h2>
+        </div>
+        <div class="project-reading">
+          <p>{{PROJECT_BACKGROUND_COPY}}</p>
+          <figure
+            class="project-placeholder project-placeholder--landscape"
+            role="img"
+            aria-label="Replace with a project context image"
+          >
+            <span>CONTEXT IMAGE</span>
+            <small>assets/media/context.webp</small>
+          </figure>
+        </div>
+      </section>
+
+      <section class="project-section" id="process">
+        <header class="project-section__header">
+          <p class="project-kicker">03 / PROCESS</p>
+          <h2>{{PROJECT_PROCESS_TITLE}}</h2>
+          <p>{{PROJECT_PROCESS_COPY}}</p>
+        </header>
+        <div class="project-process-grid">
+          <figure class="project-placeholder" role="img" aria-label="Process image one">
+            <span>PROCESS 01</span>
+          </figure>
+          <figure class="project-placeholder" role="img" aria-label="Process image two">
+            <span>PROCESS 02</span>
+          </figure>
+          <figure class="project-placeholder" role="img" aria-label="Process image three">
+            <span>PROCESS 03</span>
+          </figure>
+        </div>
+      </section>
+
+      <section class="project-section project-outcome" id="outcome">
+        <div>
+          <p class="project-kicker">04 / OUTCOME</p>
+          <h2>{{PROJECT_OUTCOME_TITLE}}</h2>
+          <p>{{PROJECT_OUTCOME_COPY}}</p>
+        </div>
+        <a href="#project-home">返回项目顶部 ↑</a>
+      </section>
+    </main>
+
+    <noscript>
+      <p class="project-noscript">请启用 JavaScript 查看项目页面。</p>
+    </noscript>
+  </body>
+</html>

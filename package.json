@@ -5,6 +5,7 @@
   "description": "Sinpol product design portfolio and project case studies.",
   "scripts": {
     "build": "node scripts/build-release.mjs",
+    "new:project": "node scripts/create-project.mjs",
     "preview": "node scripts/serve-dist.mjs",
     "verify": "node scripts/build-release.mjs --verify-only"
   },
