@@ -132,6 +132,13 @@ function sanitizeLegacyHtml() {
 
   html = html
     .replace(
+      /<link\b[^>]*href=["']_sui-origin-assets\/sui-v2\.shared\.[^"']+\.css["'][^>]*>/gi,
+      (tag) =>
+        tag
+          .replace(/\s+integrity=["'][^"']+["']/i, '')
+          .replace(/\s+crossorigin=["'][^"']+["']/i, ''),
+    )
+    .replace(
       /<link\b[^>]*rel=["']preconnect["'][^>]*cdn\.prod\.website-files\.com[^>]*>\s*/gi,
       '',
     )
