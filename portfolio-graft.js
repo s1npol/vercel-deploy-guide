@@ -725,6 +725,109 @@
       else window.scrollTo(0, top);
     };
 
+    let experienceTransitionRecoveryTimer = 0;
+    const queueExperienceTransitionRecovery = (section) => {
+      window.clearTimeout(experienceTransitionRecoveryTimer);
+      if (section?.id !== "pg-experience") return;
+
+      experienceTransitionRecoveryTimer = window.setTimeout(() => {
+        const canvas = document.querySelector("#canvasPin");
+        if (!canvas) return;
+
+        const viewportHeight = Math.max(1, window.innerHeight);
+        const canvasRect = canvas.getBoundingClientRect();
+        const heading = document.querySelector(".timeline_heading");
+        const headingOpacity = heading
+          ? Number.parseFloat(getComputedStyle(heading).opacity) || 0
+          : 1;
+        const destination = getTargetTop(section);
+        const canvasStillCovering =
+          canvasRect.top > -viewportHeight * 0.16 &&
+          canvasRect.top < viewportHeight * 0.16 &&
+          canvasRect.bottom > viewportHeight * 0.84;
+        const canvasWaitingBelow =
+          canvasRect.top >= viewportHeight * 0.45 &&
+          canvasRect.top < viewportHeight * 1.4;
+        const destinationMissed = Math.abs(window.scrollY - destination) > viewportHeight * 0.24;
+        const experienceStillHidden = headingOpacity <= 0.08;
+        if (
+          !canvasStillCovering &&
+          !canvasWaitingBelow &&
+          !destinationMissed &&
+          !experienceStillHidden
+        ) {
+          return;
+        }
+
+        const columns = Array.from(document.querySelectorAll(".timeline_colum_left"));
+        const progress = Array.from(
+          document.querySelectorAll(".timeline_progress_main, .timeline_progress"),
+        );
+        const gsap = window.gsap;
+        const scrollEngine =
+          window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+
+        setScroll(scrollEngine, destination);
+        requestAnimationFrame(() => setScroll(scrollEngine, getTargetTop(section)));
+
+        const finalizeRecovery = () => {
+          scrollEngine?.start?.();
+          window.ScrollTrigger?.refresh?.();
+          delete document.documentElement.dataset.pgNavJumpLock;
+          document.documentElement.dataset.pgExperienceTransitionState = "recovered";
+          window.dispatchEvent(new CustomEvent("portfolio:experience-transition-recovered"));
+        };
+
+        if (gsap) {
+          gsap.killTweensOf(canvas);
+          gsap.to(canvas, {
+            y: "-100%",
+            opacity: 1,
+            duration: 0.52,
+            ease: "power3.inOut",
+            onComplete: finalizeRecovery,
+          });
+          if (heading) {
+            gsap.to(heading, {
+              y: "0%",
+              scale: 1,
+              opacity: 1,
+              duration: 0.48,
+              delay: 0.12,
+              ease: "power3.out",
+            });
+          }
+          if (columns.length) {
+            gsap.to(columns, {
+              y: "0%",
+              opacity: 1,
+              duration: 0.48,
+              delay: 0.16,
+              stagger: 0.06,
+              ease: "power3.out",
+            });
+          }
+          if (progress.length) {
+            gsap.to(progress, { opacity: 1, duration: 0.4, delay: 0.18 });
+          }
+        } else {
+          canvas.style.transform = "translate3d(0, -100%, 0)";
+          if (heading) {
+            heading.style.opacity = "1";
+            heading.style.transform = "none";
+          }
+          columns.forEach((column) => {
+            column.style.opacity = "1";
+            column.style.transform = "none";
+          });
+          progress.forEach((element) => {
+            element.style.opacity = "1";
+          });
+          finalizeRecovery();
+        }
+      }, 5200);
+    };
+
     const restoreSelectedWorkReturn = () => {
       if (window.location.hash !== "#pg-selected-work" || !selectedWork) return;
 
@@ -862,6 +965,7 @@
       if (!section) return;
       lastSectionJump = now;
       glideTo(section);
+      queueExperienceTransitionRecovery(section);
     };
 
     nav.addEventListener("pointerdown", activate, true);
