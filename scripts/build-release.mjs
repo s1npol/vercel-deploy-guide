@@ -9,7 +9,15 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, extname, join, relative, resolve } from 'node:path'
+import {
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -87,9 +95,14 @@ const transparentPixel =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
 
 function assertInsideProject(path) {
-  const normalizedRoot = `${projectRoot.toLowerCase()}\\`
-  const normalizedPath = resolve(path).toLowerCase()
-  if (!normalizedPath.startsWith(normalizedRoot)) {
+  const relativePath = relative(projectRoot, resolve(path))
+  const escapesProject =
+    !relativePath ||
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+
+  if (escapesProject) {
     throw new Error(`Refusing to write outside the project: ${path}`)
   }
 }
