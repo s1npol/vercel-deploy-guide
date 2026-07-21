@@ -1,3 +1,92 @@
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #fff;
+}
+
+.project-intro-shell {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+  color: #000;
+  background: #fff;
+  font-family: "TWK Everett", "Helvetica Neue", sans-serif;
+}
+
+.project-intro-shell__media {
+  position: absolute;
+  z-index: 0;
+  inset: 300px 0 0;
+  overflow: hidden;
+  background: #f5f7f4;
+  pointer-events: none;
+}
+
+.project-intro-shell__media video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  animation: project-intro-video-reveal 520ms 80ms ease-out forwards;
+}
+
+.project-intro-shell__veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#fff, transparent 42%, #fff);
+}
+
+.project-intro-shell__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1280px;
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 53px 24px 160px;
+  text-align: center;
+}
+
+.project-intro-shell h1 {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 0.22em;
+  margin: 0;
+  font-size: clamp(52px, 7.1vw, 104px);
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: -0.065em;
+  text-wrap: balance;
+}
+
+.project-intro-shell h1 span:last-child {
+  color: #6f6f6f;
+}
+
+.project-intro-shell p {
+  max-width: 680px;
+  margin: 32px 0 0;
+  color: #6f6f6f;
+  font-size: 18px;
+  line-height: 1.625;
+  text-wrap: balance;
+}
+
 .aethera-hero__cta {
   min-width: 176px;
   transition:
@@ -67,5 +156,45 @@
   .aethera-hero__cta.is-loading::after {
     animation: none;
     opacity: 0.7;
+  }
+}
+
+@keyframes project-intro-video-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 700px) {
+  .project-intro-shell__media {
+    inset: 40svh 0 0;
+  }
+
+  .project-intro-shell__content {
+    justify-content: flex-start;
+    padding: clamp(128px, 22svh, 190px) 20px 120px;
+  }
+
+  .project-intro-shell h1 {
+    max-width: 94vw;
+    gap: 0 0.18em;
+    font-size: clamp(42px, 13.6vw, 70px);
+  }
+
+  .project-intro-shell p {
+    max-width: 34rem;
+    margin-top: 24px;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .project-intro-shell p br {
+    display: none;
+  }
+
+  .project-intro-shell .aethera-hero__cta {
+    margin-top: 32px;
+    padding: 16px 42px;
+    font-size: 14px;
   }
 }

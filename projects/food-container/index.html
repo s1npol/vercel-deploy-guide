@@ -13,12 +13,72 @@
       content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; media-src 'self'; connect-src 'self' ws: wss: https://fonts.googleapis.com https://fonts.gstatic.com; form-action 'self'; upgrade-insecure-requests"
     />
     <title>Daily Lunch — 便携饭盒产品设计</title>
-    <script defer src="./assets/intro-readiness.js?v=1"></script>
-    <script type="module" crossorigin src="./assets/index-xgEmZlgl.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BiQRH2r8.css">
-    <link rel="stylesheet" href="./assets/intro-readiness.css?v=1">
+    <link
+      rel="preload"
+      href="./assets/daily-lunch-intro.mp4"
+      as="video"
+      type="video/mp4"
+      fetchpriority="high"
+    />
+    <link
+      rel="modulepreload"
+      href="./assets/index-xgEmZlgl.js"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="./assets/index-BiQRH2r8.css"
+      as="style"
+      fetchpriority="high"
+    />
+    <link rel="stylesheet" href="./assets/intro-readiness.css?v=2" />
+    <link
+      rel="stylesheet"
+      href="./assets/index-BiQRH2r8.css"
+      media="print"
+      data-project-styles
+      crossorigin
+    />
+    <script
+      defer
+      src="./assets/intro-readiness.js?v=2"
+      data-project-module="./assets/index-xgEmZlgl.js"
+    ></script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="project-intro-shell" aria-label="Daily Lunch loading">
+        <div class="project-intro-shell__media" aria-hidden="true">
+          <video
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="auto"
+            src="./assets/daily-lunch-intro.mp4"
+          ></video>
+          <div class="project-intro-shell__veil"></div>
+        </div>
+        <div class="project-intro-shell__content">
+          <h1>
+            <span>Easy catch,</span>
+            <span>Daily lunch.</span>
+          </h1>
+          <p>
+            应对欧美市场制作的一款翻盖式饭盒，使用场景为平时上学的学生和<br />
+            通勤的上班族，需满足饭盒的便捷性和简洁大方的设计外观需求。
+          </p>
+          <button
+            class="aethera-hero__cta is-loading"
+            type="button"
+            disabled
+            aria-disabled="true"
+            aria-busy="true"
+          >
+            LOADING
+          </button>
+        </div>
+      </main>
+    </div>
   </body>
 </html>

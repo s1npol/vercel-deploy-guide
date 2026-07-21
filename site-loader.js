@@ -6,8 +6,18 @@
   const label = loader?.querySelector(".site-loader__status-label");
   if (!loader) return;
 
+  const SESSION_READY_KEY = "sinpol-portfolio-ready-v2";
+  const returningVisit = (() => {
+    try {
+      return window.sessionStorage.getItem(SESSION_READY_KEY) === "true";
+    } catch {
+      return false;
+    }
+  })();
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  const minimumVisibleMs = reduceMotion ? 700 : 2200;
+  const minimumVisibleMs = returningVisit
+    ? (reduceMotion ? 0 : 180)
+    : (reduceMotion ? 700 : 2200);
   // The legacy host runtime is optional for the portfolio shell. Never let it
   // hold the first view hostage when a network-bound Webflow animation fails.
   const maximumWaitAfterDomMs = 7200;
@@ -39,6 +49,7 @@
   let raf = 0;
   let finished = false;
   let forcedRelease = false;
+  loader.dataset.visit = returningVisit ? "returning" : "first";
 
   const setTask = (name) => {
     if (!tasks.has(name) || tasks.get(name) === 1) return;
@@ -100,6 +111,31 @@
         asset.loading = "eager";
         asset.decode?.().catch?.(() => {});
       });
+
+      const connection = navigator.connection || navigator.mozConnection ||
+        navigator.webkitConnection;
+      const shouldPrefetchProject = !connection?.saveData &&
+        !["slow-2g", "2g"].includes(connection?.effectiveType);
+      if (!shouldPrefetchProject) return;
+
+      const projectResources = [
+        { href: "/projects/food-container/index.html", rel: "prefetch", as: "document" },
+        { href: "/projects/food-container/assets/index-BiQRH2r8.css", rel: "prefetch", as: "style" },
+        { href: "/projects/food-container/assets/index-xgEmZlgl.js", rel: "modulepreload" },
+        { href: "/projects/food-container/assets/daily-lunch-intro.mp4", rel: "prefetch", as: "video", type: "video/mp4" },
+      ];
+
+      projectResources.forEach(({ href, rel, as, type }) => {
+        if (document.head.querySelector(`link[href="${href}"]`)) return;
+        const link = document.createElement("link");
+        link.href = href;
+        link.rel = rel;
+        if (as) link.as = as;
+        if (type) link.type = type;
+        link.fetchPriority = "low";
+        link.dataset.sitePrefetch = "food-container";
+        document.head.appendChild(link);
+      });
     };
     if ("requestIdleCallback" in window) {
       window.requestIdleCallback(warm, { timeout: 1200 });
@@ -132,6 +168,11 @@
     loader.remove();
     document.documentElement.classList.remove("site-revealing");
     document.documentElement.classList.add("site-revealed");
+    try {
+      window.sessionStorage.setItem(SESSION_READY_KEY, "true");
+    } catch {
+      // Storage can be unavailable in strict privacy modes; readiness remains intact.
+    }
     window.dispatchEvent(new CustomEvent("site:revealed"));
 
     await nextFrame();

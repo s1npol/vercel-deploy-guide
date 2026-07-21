@@ -49,6 +49,10 @@ const productionDirectories = [
 const releaseOnlyExcludes = [
   'projects/food-container/assets/daily-lunch-case/internal-layout.png',
   'projects/food-container/assets/daily-lunch-case/internal-boxes.png',
+  'projects/food-container/assets/daily-lunch-case/internal-handle.png',
+  'projects/food-container/assets/daily-lunch-case/internal-user-scene.png',
+  'projects/food-container/assets/daily-lunch-case/brand-package.png',
+  'projects/food-container/assets/daily-lunch-case/brand-grid.png',
 ]
 
 const forbiddenNames = new Set([
