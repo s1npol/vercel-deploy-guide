@@ -1,0 +1,71 @@
+.aethera-hero__cta {
+  min-width: 176px;
+  transition:
+    transform 300ms ease,
+    opacity 180ms ease,
+    background-color 180ms ease;
+}
+
+.aethera-hero__cta.is-loading,
+.aethera-hero__cta:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  pointer-events: none;
+  transform: none !important;
+}
+
+.aethera-hero__cta.is-loading::after {
+  width: 4px;
+  height: 4px;
+  margin-left: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  animation: intro-readiness-pulse 900ms ease-in-out infinite;
+}
+
+.aethera-hero__cta.is-resolving {
+  opacity: 0.42;
+}
+
+.aethera-hero__cta.is-ready {
+  animation: intro-readiness-reveal 320ms ease-out both;
+}
+
+@keyframes intro-readiness-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes intro-readiness-reveal {
+  from {
+    opacity: 0.55;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aethera-hero__cta,
+  .aethera-hero__cta.is-ready {
+    animation: none;
+    transition: none;
+  }
+
+  .aethera-hero__cta.is-loading::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}
