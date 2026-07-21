@@ -812,6 +812,32 @@
     const waitForPageTurnBoundary = (requestId) =>
       new Promise((resolve) => {
         const startedAt = performance.now();
+        let visualEndpoint = "";
+        let visualEndpointSince = 0;
+
+        const getVisualEndpoint = () => {
+          const wrapper = document.querySelector(".canvas-wrapper");
+          const experience = document.querySelector("#pg-experience");
+          if (!wrapper || !experience) return "";
+
+          const wrapperWidth = wrapper.getBoundingClientRect().width;
+          const experienceTop = experience.getBoundingClientRect().top;
+          const viewportWidth = Math.max(1, window.innerWidth);
+          const viewportHeight = Math.max(1, window.innerHeight);
+
+          if (
+            wrapperWidth <= viewportWidth * 0.01 &&
+            experienceTop >= viewportHeight * 0.65
+          ) return "profile";
+
+          if (
+            wrapperWidth >= viewportWidth * 0.98 &&
+            Math.abs(experienceTop) <= viewportHeight * 0.22
+          ) return "experience";
+
+          return "";
+        };
+
         const step = (now) => {
           if (requestId !== window.__portfolioNavRequestId) {
             resolve(false);
@@ -820,12 +846,107 @@
 
           const nativeTurn = document.documentElement.dataset.pgNativeTurn;
           const transitionActive = nativeTurn === "forward" || nativeTurn === "reverse";
-          if (!transitionActive || now - startedAt >= 5200) {
+          if (!transitionActive) {
             resolve(true);
             return;
           }
+
+          const nextVisualEndpoint = getVisualEndpoint();
+          if (nextVisualEndpoint !== visualEndpoint) {
+            visualEndpoint = nextVisualEndpoint;
+            visualEndpointSince = nextVisualEndpoint ? now : 0;
+          }
+
+          const endpointIsStable =
+            visualEndpoint &&
+            now - visualEndpointSince >= 380 &&
+            now - startedAt >= 600;
+          if (endpointIsStable) {
+            document.documentElement.dataset.pgNativeTurn = visualEndpoint;
+            resolve(true);
+            return;
+          }
+
+          if (now - startedAt >= 7200) {
+            if (visualEndpoint) {
+              document.documentElement.dataset.pgNativeTurn = visualEndpoint;
+            }
+            resolve(true);
+            return;
+          }
+
           requestAnimationFrame(step);
         };
+        requestAnimationFrame(step);
+      });
+
+    const stabilizeProfileEndpoint = (section, requestId) =>
+      new Promise((resolve) => {
+        const startedAt = performance.now();
+        let endpointSince = 0;
+        const scrollEngine =
+          window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+
+        const step = (now) => {
+          if (requestId !== window.__portfolioNavRequestId) {
+            resolve(false);
+            return;
+          }
+
+          const wrapperWidth = document
+            .querySelector(".canvas-wrapper")
+            ?.getBoundingClientRect().width || 0;
+          const anchorTop = section.getBoundingClientRect().top;
+          const navHeight = nav.getBoundingClientRect().height || 0;
+          const nativeTurn = document.documentElement.dataset.pgNativeTurn;
+          const transitionActive = nativeTurn === "forward" || nativeTurn === "reverse";
+          const atProfileEndpoint =
+            wrapperWidth <= Math.max(1, window.innerWidth) * 0.01 &&
+            Math.abs(anchorTop - navHeight) <= 4;
+
+          if (atProfileEndpoint) {
+            if (!endpointSince) endpointSince = now;
+          } else {
+            endpointSince = 0;
+          }
+
+          if (
+            transitionActive &&
+            atProfileEndpoint &&
+            now - endpointSince >= 380 &&
+            now - startedAt >= 600
+          ) {
+            document.documentElement.dataset.pgNativeTurn = "profile";
+          }
+
+          const currentTurn = document.documentElement.dataset.pgNativeTurn;
+          const currentTransitionActive =
+            currentTurn === "forward" || currentTurn === "reverse";
+          if (!currentTransitionActive && currentTurn === "profile" && !atProfileEndpoint) {
+            setScroll(scrollEngine, getTargetTop(section));
+          }
+
+          const stableLongEnough =
+            atProfileEndpoint &&
+            !currentTransitionActive &&
+            endpointSince &&
+            now - endpointSince >= 480 &&
+            now - startedAt >= 1800;
+          if (stableLongEnough) {
+            resolve(true);
+            return;
+          }
+
+          if (now - startedAt >= 4200) {
+            setScroll(scrollEngine, getTargetTop(section));
+            document.documentElement.dataset.pgNativeTurn = "profile";
+            resolve(true);
+            return;
+          }
+
+          requestAnimationFrame(step);
+        };
+
         requestAnimationFrame(step);
       });
 
@@ -920,13 +1041,18 @@
       waitForPageTurnBoundary(requestId).then(async (ready) => {
         if (!ready || requestId !== window.__portfolioNavRequestId) return;
         const firstGlideComplete = await glideTo(section, requestId);
-        if (
-          !firstGlideComplete ||
-          requestId !== window.__portfolioNavRequestId ||
-          section !== selectedWork
-        ) return;
+        if (!firstGlideComplete || requestId !== window.__portfolioNavRequestId) return;
+
+        if (section.id === "pg-profile-anchor") {
+          await stabilizeProfileEndpoint(section, requestId);
+          return;
+        }
+
         const pageTurnSettled = await waitForPageTurnBoundary(requestId);
         if (!pageTurnSettled || requestId !== window.__portfolioNavRequestId) return;
+
+        if (section !== selectedWork) return;
+
         await glideTo(section, requestId);
       });
     };
@@ -934,6 +1060,46 @@
     nav.addEventListener("pointerdown", activate, true);
     nav.addEventListener("click", activate, true);
     nav.addEventListener("keydown", activate, true);
+
+    if (profile && !window.__pgProfileEndpointRepairReady) {
+      window.__pgProfileEndpointRepairReady = true;
+      let repairTimer = 0;
+
+      const repairProfileEndpoint = () => {
+        repairTimer = 0;
+        if (
+          document.documentElement.dataset.pgNavJumpLock === "true" ||
+          document.documentElement.dataset.pgContactJumpLock === "true" ||
+          document.documentElement.dataset.pgNativeTurn !== "profile"
+        ) return;
+
+        const wrapperWidth = document
+          .querySelector(".canvas-wrapper")
+          ?.getBoundingClientRect().width || 0;
+        const viewportWidth = Math.max(1, window.innerWidth);
+        const anchorTop = profile.getBoundingClientRect().top;
+        const navHeight = nav.getBoundingClientRect().height || 0;
+        const nearProfileEndpoint =
+          anchorTop >= -8 &&
+          anchorTop <= navHeight + 8 &&
+          wrapperWidth > viewportWidth * 0.01 &&
+          wrapperWidth <= viewportWidth * 0.2;
+        if (!nearProfileEndpoint) return;
+
+        const scrollEngine =
+          window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+        setScroll(scrollEngine, getTargetTop(profile));
+      };
+
+      const scheduleProfileEndpointRepair = () => {
+        window.clearTimeout(repairTimer);
+        repairTimer = window.setTimeout(repairProfileEndpoint, 640);
+      };
+
+      window.addEventListener("scroll", scheduleProfileEndpointRepair, { passive: true });
+      window.addEventListener("wheel", scheduleProfileEndpointRepair, { passive: true });
+      window.addEventListener("touchend", scheduleProfileEndpointRepair, { passive: true });
+    }
   }
 
   function setupContactNavLink() {
