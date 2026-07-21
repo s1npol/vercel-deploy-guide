@@ -1712,6 +1712,15 @@
       <div class="pg-project" data-pg-project>
         <div class="pg-project__loader" aria-live="polite">001</div>
         <nav class="pg-project__ticks" data-project-ticks aria-label="Project quick navigation"></nav>
+        <nav class="pg-project__touch-nav" data-project-touch-nav aria-label="Touch project navigation">
+          <button class="pg-project__touch-control pg-project__touch-arrow" type="button" data-project-touch-prev aria-label="Previous project">
+            <span aria-hidden="true">&#8249;</span>
+          </button>
+          <div class="pg-project__touch-pages" data-project-touch-pages></div>
+          <button class="pg-project__touch-control pg-project__touch-arrow" type="button" data-project-touch-next aria-label="Next project">
+            <span aria-hidden="true">&#8250;</span>
+          </button>
+        </nav>
         <nav class="pg-project__nav" aria-label="Project page controls">
           <button class="pg-project__brand" type="button" data-project-home aria-label="Selected work">
             <span>SELECTED WORK</span>
@@ -1734,6 +1743,10 @@
     const projectRoot = slot.querySelector("[data-pg-project]");
     const stage = slot.querySelector("[data-project-stage]");
     const ticks = slot.querySelector("[data-project-ticks]");
+    const touchNav = slot.querySelector("[data-project-touch-nav]");
+    const touchPages = slot.querySelector("[data-project-touch-pages]");
+    const touchPrev = slot.querySelector("[data-project-touch-prev]");
+    const touchNext = slot.querySelector("[data-project-touch-next]");
     const loader = slot.querySelector(".pg-project__loader");
     const detailTitle = slot.querySelector("[data-project-title]");
     const detailCta = slot.querySelector("[data-project-cta]");
@@ -1750,10 +1763,17 @@
     let raf = 0;
     let active = false;
     let lastWheelStepAt = 0;
-    let phoneWheelAccumulator = 0;
-    let phoneWheelGestureLocked = false;
-    let phoneWheelReleaseTimer = 0;
     let openAlignRaf = 0;
+    let touchPageWindowStart = 0;
+    let touchDragProgress = 0;
+    let touchGesture = null;
+    let suppressProjectClickUntil = 0;
+    let touchMoveLockedUntil = 0;
+
+    const touchNavigationQuery = window.matchMedia("(pointer: coarse), (hover: none)");
+    const prefersTouchNavigation = () => touchNavigationQuery.matches
+      || navigator.maxTouchPoints > 0
+      || document.documentElement.classList.contains("w-mod-touch");
 
     const clampIndex = (value) => Math.max(0, Math.min(projects.length - 1, value));
 
@@ -1784,6 +1804,87 @@
       detailCopy.textContent = project.copy;
     };
 
+    const getTouchPageCapacity = () => {
+      const width = Math.min(window.innerWidth, projectRoot.getBoundingClientRect().width || window.innerWidth);
+      if (width >= 520) return projects.length;
+      if (width >= 480) return 5;
+      return 4;
+    };
+
+    const showTouchPress = (control) => {
+      control.classList.remove("is-pressed");
+      void control.offsetWidth;
+      control.classList.add("is-pressed");
+      window.setTimeout(() => control.classList.remove("is-pressed"), 520);
+    };
+
+    const renderTouchNavigation = (preserveWindow = false) => {
+      const capacity = getTouchPageCapacity();
+      const allPagesFit = capacity >= projects.length;
+      if (allPagesFit) {
+        touchPageWindowStart = 0;
+      } else if (!preserveWindow && (selected < touchPageWindowStart || selected >= touchPageWindowStart + capacity)) {
+        touchPageWindowStart = Math.min(
+          Math.floor(selected / capacity) * capacity,
+          Math.max(0, projects.length - capacity)
+        );
+      }
+
+      const start = allPagesFit ? 0 : touchPageWindowStart;
+      const end = allPagesFit ? projects.length : Math.min(projects.length, start + capacity);
+      touchPages.replaceChildren();
+
+      const addMoreButton = (direction) => {
+        const more = document.createElement("button");
+        more.className = "pg-project__touch-control pg-project__touch-more";
+        more.type = "button";
+        more.textContent = "…";
+        more.setAttribute("aria-label", direction < 0 ? "Show previous project numbers" : "Show next project numbers");
+        more.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          showTouchPress(more);
+          const maxStart = Math.max(0, projects.length - capacity);
+          touchPageWindowStart = direction < 0
+            ? Math.max(0, Math.floor((start - 1) / capacity) * capacity)
+            : Math.min(maxStart, start + capacity);
+          renderTouchNavigation(true);
+        });
+        touchPages.appendChild(more);
+      };
+
+      if (!allPagesFit && start > 0) addMoreButton(-1);
+      for (let index = start; index < end; index += 1) {
+        const page = document.createElement("button");
+        const isSelected = index === selected;
+        page.className = `pg-project__touch-control pg-project__touch-page${isSelected ? " is-active" : ""}`;
+        page.type = "button";
+        page.textContent = String(index + 1);
+        page.setAttribute("aria-label", `Open project ${index + 1}: ${projects[index].cardTitle}`);
+        page.setAttribute("aria-pressed", String(isSelected));
+        if (isSelected) page.setAttribute("aria-current", "true");
+        page.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          showTouchPress(page);
+          openWork(index);
+        });
+        touchPages.appendChild(page);
+      }
+      if (!allPagesFit && end < projects.length) addMoreButton(1);
+
+      touchPrev.disabled = selected === 0;
+      touchNext.disabled = selected === projects.length - 1;
+      touchNav.setAttribute("aria-hidden", String(!prefersTouchNavigation()));
+    };
+
+    const updateTouchNavigationMode = () => {
+      const enabled = prefersTouchNavigation();
+      projectRoot.classList.toggle("has-touch-project-nav", enabled);
+      touchNav.setAttribute("aria-hidden", String(!enabled));
+      renderTouchNavigation();
+    };
+
     const syncTickStates = () => {
       const workOpen = projectRoot.classList.contains("is-work");
       tickButtons.forEach((tick, tickIndex) => {
@@ -1797,6 +1898,7 @@
           `${workOpen ? "View" : "Open"} project ${pad(tickIndex + 1)}: ${projects[tickIndex].cardTitle}${isSelected ? ", current" : ""}`
         );
       });
+      renderTouchNavigation();
     };
 
     const syncCardStates = () => {
@@ -1878,6 +1980,15 @@
       selectProject(next);
     };
 
+    const moveTouchProject = (direction) => {
+      const now = performance.now();
+      if (now < touchMoveLockedUntil) return;
+      const next = clampIndex(selected + direction);
+      if (next === selected) return;
+      touchMoveLockedUntil = now + 280;
+      moveProject(direction);
+    };
+
     const isInsideProjectPage = (event) => {
       const hovered = document.elementFromPoint(event.clientX, event.clientY);
       if (hovered?.closest?.(".pg-project__card, .pg-project__close")) return true;
@@ -1906,14 +2017,15 @@
       current += (target - current) * 0.075;
       const rect = projectRoot.getBoundingClientRect();
       const gap = Math.max(128, Math.min(210, rect.width * 0.145));
+      const visualCurrent = current - touchDragProgress;
       const driftX = pointerX * 28;
       const driftY = pointerY * 18;
 
       cards.forEach((card, index) => {
-        const diff = index - current;
+        const diff = index - visualCurrent;
         const abs = Math.abs(diff);
         const x = diff * gap + driftX;
-        const y = Math.sin((index + current) * 0.68) * 42 + driftY;
+        const y = Math.sin((index + visualCurrent) * 0.68) * 42 + driftY;
         const z = 150 - abs * 95;
         const rot = diff * -7 + pointerX * 5;
         const scale = Math.max(0.72, 1.08 - abs * 0.055);
@@ -1988,6 +2100,19 @@
       cards.push(card);
     });
 
+    touchPrev.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showTouchPress(touchPrev);
+      moveTouchProject(-1);
+    });
+    touchNext.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showTouchPress(touchNext);
+      moveTouchProject(1);
+    });
+
     slot.querySelector("[data-project-home]").addEventListener("click", () => setMode("home"));
     window.addEventListener("portfolio:return-selected-work", () => {
       cancelOpenAlignment();
@@ -2039,40 +2164,100 @@
       window.setTimeout(() => closeControl.classList.remove("is-pressed"), reduceMotion ? 0 : 360);
     });
     projectRoot.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") return;
       const rect = projectRoot.getBoundingClientRect();
       pointerX = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
       pointerY = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
       requestLayout();
     });
 
-    window.addEventListener("wheel", (event) => {
-      if (!isInsideProjectPage(event)) return;
+    const resetTouchGesture = () => {
+      touchGesture = null;
+      touchDragProgress = 0;
+      requestLayout();
+    };
+
+    projectRoot.addEventListener("pointerdown", (event) => {
+      if (!prefersTouchNavigation() || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;
+      if (event.target.closest(".pg-project__touch-nav, .pg-project__close, .pg-project__cta")) return;
+      if (event.clientX <= 24 || event.clientX >= window.innerWidth - 24) return;
       cancelOpenAlignment();
-      const phoneFrame = window.matchMedia("(max-width: 820px)").matches;
-      const impulse = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-      if (phoneFrame) {
-        const direction = impulse > 0 ? 1 : -1;
-        if (clampIndex(selected + direction) === selected) {
-          phoneWheelAccumulator = 0;
-          phoneWheelGestureLocked = false;
-          window.clearTimeout(phoneWheelReleaseTimer);
+      touchGesture = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        lastX: event.clientX,
+        lastAt: performance.now(),
+        velocityX: 0,
+        lock: "pending"
+      };
+    }, { passive: true });
+
+    projectRoot.addEventListener("pointermove", (event) => {
+      if (!touchGesture || event.pointerId !== touchGesture.pointerId) return;
+      const dx = event.clientX - touchGesture.startX;
+      const dy = event.clientY - touchGesture.startY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      const now = performance.now();
+      const elapsed = Math.max(1, now - touchGesture.lastAt);
+      touchGesture.velocityX = (event.clientX - touchGesture.lastX) / elapsed;
+      touchGesture.lastX = event.clientX;
+      touchGesture.lastAt = now;
+
+      if (touchGesture.lock === "pending") {
+        if (Math.max(absX, absY) < 12) return;
+        if (absX > absY * 1.4) {
+          touchGesture.lock = "horizontal";
+          projectRoot.setPointerCapture?.(event.pointerId);
+        } else if (absY > 10) {
+          touchGesture.lock = "vertical";
+          touchDragProgress = 0;
           return;
         }
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        if (Math.abs(impulse) < 1) return;
-        phoneWheelAccumulator += impulse;
-        window.clearTimeout(phoneWheelReleaseTimer);
-        phoneWheelReleaseTimer = window.setTimeout(() => {
-          phoneWheelAccumulator = 0;
-          phoneWheelGestureLocked = false;
-        }, 260);
-        if (phoneWheelGestureLocked || Math.abs(phoneWheelAccumulator) < 42) return;
-        phoneWheelGestureLocked = true;
-        moveProject(phoneWheelAccumulator > 0 ? 1 : -1);
-        return;
       }
+      if (touchGesture.lock !== "horizontal") return;
+
+      const rect = projectRoot.getBoundingClientRect();
+      const gap = Math.max(128, Math.min(210, rect.width * 0.145));
+      const atStart = selected === 0 && dx > 0;
+      const atEnd = selected === projects.length - 1 && dx < 0;
+      const resistance = atStart || atEnd ? 0.24 : 1;
+      touchDragProgress = Math.max(-0.88, Math.min(0.88, (dx / gap) * resistance));
+      requestLayout();
+    }, { passive: true });
+
+    const finishTouchGesture = (event) => {
+      if (!touchGesture || event.pointerId !== touchGesture.pointerId) return;
+      const gesture = touchGesture;
+      const dx = event.clientX - gesture.startX;
+      const rect = projectRoot.getBoundingClientRect();
+      const distanceThreshold = Math.max(48, Math.min(76, rect.width * 0.16));
+      const shouldMove = gesture.lock === "horizontal"
+        && (Math.abs(dx) >= distanceThreshold || Math.abs(gesture.velocityX) >= 0.45);
+      resetTouchGesture();
+      if (!shouldMove) return;
+      suppressProjectClickUntil = performance.now() + 420;
+      moveTouchProject(dx < 0 ? 1 : -1);
+    };
+
+    projectRoot.addEventListener("pointerup", finishTouchGesture, { passive: true });
+    projectRoot.addEventListener("pointercancel", resetTouchGesture, { passive: true });
+    projectRoot.addEventListener("lostpointercapture", resetTouchGesture, { passive: true });
+    projectRoot.addEventListener("click", (event) => {
+      if (performance.now() >= suppressProjectClickUntil) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) resetTouchGesture();
+    });
+
+    window.addEventListener("wheel", (event) => {
+      if (!isInsideProjectPage(event)) return;
+      if (prefersTouchNavigation()) return;
+      cancelOpenAlignment();
+      const impulse = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -2109,6 +2294,7 @@
     }, 32);
 
     window.addEventListener("resize", () => {
+      updateTouchNavigationMode();
       requestLayout();
       if (projectRoot.classList.contains("is-work")) {
         if (window.matchMedia("(max-width: 820px)").matches) {
@@ -2118,7 +2304,9 @@
         window.setTimeout(() => alignOpenProject(), 80);
       }
     }, { passive: true });
+    touchNavigationQuery.addEventListener?.("change", updateTouchNavigationMode);
     window.addEventListener("touchstart", cancelOpenAlignment, { passive: true });
+    updateTouchNavigationMode();
     selectProject(0, { snap: true });
   }
 
