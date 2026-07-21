@@ -645,7 +645,7 @@
     if (!nav || nav.dataset.navFeedbackReady === "true") return;
     nav.dataset.navFeedbackReady = "true";
 
-    const controls = () => Array.from(nav.querySelectorAll(".pg-nav-links [data-pg-nav-target], .pg-contact"));
+    const controls = () => Array.from(nav.querySelectorAll(".pg-contact"));
     const release = (control) => control?.classList.remove("is-pressed");
     const showFeedback = (control, event) => {
       if (!control || control.dataset.navFeedbackAt === String(event.timeStamp)) return;
@@ -669,14 +669,14 @@
 
     window.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
-      const control = event.target?.closest?.(".pg-nav-links [data-pg-nav-target], .pg-contact");
+      const control = event.target?.closest?.(".pg-contact");
       if (!control || !nav.contains(control)) return;
       showFeedback(control, event);
     }, true);
 
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
-      const control = event.target?.closest?.(".pg-nav-links [data-pg-nav-target], .pg-contact");
+      const control = event.target?.closest?.(".pg-contact");
       if (!control || !nav.contains(control)) return;
       showFeedback(control, event);
     }, true);
@@ -690,29 +690,23 @@
 
   function setupPrimarySectionNav() {
     const nav = document.querySelector(".pg-nav");
-    if (!nav || nav.dataset.sectionNavReady === "true") return;
-    nav.dataset.sectionNavReady = "true";
-    window.__portfolioNavRequestId = Number(window.__portfolioNavRequestId) || 0;
+    if (!nav || nav.dataset.sectionIndicatorReady === "true") return;
+    nav.dataset.sectionIndicatorReady = "true";
 
     const profile =
       document.querySelector(".home-tabs_layout") ||
       document.querySelector("section.home-selection");
     const experience = document.querySelector(".timeline_wrapper");
     const selectedWork = document.querySelector(".home-benefits-blank");
+    const contact = document.querySelector("#pg-contact-final");
     if (profile && !profile.id) profile.id = "pg-profile-anchor";
     if (experience && !experience.id) experience.id = "pg-experience";
     if (selectedWork && !selectedWork.id) selectedWork.id = "pg-selected-work";
 
-    const links = Array.from(nav.querySelectorAll(".pg-nav-links [data-pg-nav-target]"));
-    const profileSelector = profile?.id ? `#${profile.id}` : "#pg-home";
-    const selectors = [profileSelector, "#pg-experience", "#pg-selected-work"];
-    links.forEach((link, index) => {
-      const selector = selectors[index];
-      if (!selector) return;
-      link.removeAttribute("href");
-      link.setAttribute("type", "button");
-      link.dataset.pgNavTarget = selector;
-    });
+    const indicators = Array.from(
+      nav.querySelectorAll(".pg-nav-links [data-pg-section-indicator]")
+    );
+    if (!profile || !experience || !selectedWork || !indicators.length) return;
 
     const getTargetTop = (section) => {
       const navHeight = nav.getBoundingClientRect().height || 0;
@@ -723,7 +717,10 @@
         const laptop = window.matchMedia("(min-width: 821px) and (max-width: 1280px), (min-width: 821px) and (max-height: 900px)").matches;
         navOffset = laptop ? 0 : compact ? Math.min(18, navHeight * 0.28) : navHeight;
       }
-      return Math.max(0, Math.min(section.getBoundingClientRect().top + window.scrollY - navOffset, maxScroll));
+      return Math.max(
+        0,
+        Math.min(section.getBoundingClientRect().top + window.scrollY - navOffset, maxScroll)
+      );
     };
 
     const setScroll = (engine, top) => {
@@ -731,8 +728,70 @@
       else window.scrollTo(0, top);
     };
 
+    let activeSelector = "";
+    let syncFrame = 0;
+
+    const setActiveIndicator = (selector) => {
+      if (selector === activeSelector) return;
+      activeSelector = selector;
+      nav.dataset.activeChapter = selector.replace(/^#pg-/, "") || "intro";
+      indicators.forEach((indicator) => {
+        const active = indicator.dataset.pgSectionIndicator === selector;
+        indicator.classList.toggle("is-active", active);
+        if (active) indicator.setAttribute("aria-current", "page");
+        else indicator.removeAttribute("aria-current");
+      });
+    };
+
+    const syncSectionIndicator = () => {
+      syncFrame = 0;
+      const viewportHeight = Math.max(1, window.innerHeight);
+      const navHeight = nav.getBoundingClientRect().height || 0;
+      const marker = navHeight + viewportHeight * 0.32;
+      const nativeTurn = document.documentElement.dataset.pgNativeTurn || "profile";
+
+      // During the canvas turn, keep the previous chapter selected. The native
+      // controller owns the animation and publishes its final endpoint state.
+      if (nativeTurn === "forward" || nativeTurn === "reverse") return;
+
+      const contactRect = contact?.getBoundingClientRect();
+      if (contactRect && contactRect.top <= marker && contactRect.bottom > navHeight) {
+        setActiveIndicator("");
+        return;
+      }
+
+      const selectedRect = selectedWork.getBoundingClientRect();
+      if (selectedRect.top <= marker && selectedRect.bottom > navHeight) {
+        setActiveIndicator("#pg-selected-work");
+        return;
+      }
+
+      if (nativeTurn === "experience") {
+        const experienceRect = experience.getBoundingClientRect();
+        if (experienceRect.top <= viewportHeight * 0.68 && experienceRect.bottom > navHeight) {
+          setActiveIndicator("#pg-experience");
+          return;
+        }
+      }
+
+      if (nativeTurn === "profile") {
+        const profileRect = profile.getBoundingClientRect();
+        if (profileRect.top <= marker && profileRect.bottom > navHeight) {
+          setActiveIndicator("#pg-profile-anchor");
+          return;
+        }
+      }
+
+      setActiveIndicator("");
+    };
+
+    const requestIndicatorSync = () => {
+      if (syncFrame) return;
+      syncFrame = requestAnimationFrame(syncSectionIndicator);
+    };
+
     const restoreSelectedWorkReturn = () => {
-      if (window.location.hash !== "#pg-selected-work" || !selectedWork) return;
+      if (window.location.hash !== "#pg-selected-work") return;
 
       document.documentElement.dataset.pgReturnTarget = "selected-work";
       document.documentElement.dataset.pgNavJumpLock = "true";
@@ -754,6 +813,7 @@
         scrollEngine?.start?.();
         if (refresh) window.ScrollTrigger?.refresh?.();
         setScroll(scrollEngine, getTargetTop(selectedWork));
+        requestIndicatorSync();
       };
       let returnSettleRaf = 0;
       let returnSettleCancelled = false;
@@ -762,24 +822,19 @@
         returnSettleRaf = 0;
         document.documentElement.dataset.pgReturnReady = "true";
         delete document.documentElement.dataset.pgNavJumpLock;
+        requestIndicatorSync();
       };
       const settleReturn = () => {
         align(true);
         const startedAt = performance.now();
-        const duration = 2600;
         const step = (now) => {
-          if (returnSettleCancelled) {
+          if (returnSettleCancelled || now - startedAt >= 2600) {
             finishReturn();
             return;
           }
           align(false);
-          if (now - startedAt < duration) {
-            returnSettleRaf = requestAnimationFrame(step);
-            return;
-          }
-          finishReturn();
+          returnSettleRaf = requestAnimationFrame(step);
         };
-        if (returnSettleRaf) cancelAnimationFrame(returnSettleRaf);
         returnSettleRaf = requestAnimationFrame(step);
       };
       const cancelSettleOnInput = () => {
@@ -798,273 +853,9 @@
       }
     };
 
-    restoreSelectedWorkReturn();
-
-    const cancelActiveGlide = () => {
-      window.cancelAnimationFrame(window.__portfolioNavGlideRaf);
-      window.__portfolioNavGlideRaf = 0;
-      window.clearTimeout(window.__pgNavJumpLockTimer);
-      window.__portfolioNavGlideResolve?.(false);
-      delete window.__portfolioNavGlideResolve;
-      delete document.documentElement.dataset.pgNavJumpLock;
-    };
-
-    const waitForPageTurnBoundary = (requestId) =>
-      new Promise((resolve) => {
-        const startedAt = performance.now();
-        let visualEndpoint = "";
-        let visualEndpointSince = 0;
-
-        const getVisualEndpoint = () => {
-          const wrapper = document.querySelector(".canvas-wrapper");
-          const experience = document.querySelector("#pg-experience");
-          if (!wrapper || !experience) return "";
-
-          const wrapperWidth = wrapper.getBoundingClientRect().width;
-          const experienceTop = experience.getBoundingClientRect().top;
-          const viewportWidth = Math.max(1, window.innerWidth);
-          const viewportHeight = Math.max(1, window.innerHeight);
-
-          if (
-            wrapperWidth <= viewportWidth * 0.01 &&
-            experienceTop >= viewportHeight * 0.65
-          ) return "profile";
-
-          if (
-            wrapperWidth >= viewportWidth * 0.98 &&
-            Math.abs(experienceTop) <= viewportHeight * 0.22
-          ) return "experience";
-
-          return "";
-        };
-
-        const step = (now) => {
-          if (requestId !== window.__portfolioNavRequestId) {
-            resolve(false);
-            return;
-          }
-
-          const nativeTurn = document.documentElement.dataset.pgNativeTurn;
-          const transitionActive = nativeTurn === "forward" || nativeTurn === "reverse";
-          if (!transitionActive) {
-            resolve(true);
-            return;
-          }
-
-          const nextVisualEndpoint = getVisualEndpoint();
-          if (nextVisualEndpoint !== visualEndpoint) {
-            visualEndpoint = nextVisualEndpoint;
-            visualEndpointSince = nextVisualEndpoint ? now : 0;
-          }
-
-          const endpointIsStable =
-            visualEndpoint &&
-            now - visualEndpointSince >= 380 &&
-            now - startedAt >= 600;
-          if (endpointIsStable) {
-            document.documentElement.dataset.pgNativeTurn = visualEndpoint;
-            resolve(true);
-            return;
-          }
-
-          if (now - startedAt >= 7200) {
-            if (visualEndpoint) {
-              document.documentElement.dataset.pgNativeTurn = visualEndpoint;
-            }
-            resolve(true);
-            return;
-          }
-
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      });
-
-    const stabilizeProfileEndpoint = (section, requestId) =>
-      new Promise((resolve) => {
-        const startedAt = performance.now();
-        let endpointSince = 0;
-        const scrollEngine =
-          window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
-
-        const step = (now) => {
-          if (requestId !== window.__portfolioNavRequestId) {
-            resolve(false);
-            return;
-          }
-
-          const wrapperWidth = document
-            .querySelector(".canvas-wrapper")
-            ?.getBoundingClientRect().width || 0;
-          const anchorTop = section.getBoundingClientRect().top;
-          const navHeight = nav.getBoundingClientRect().height || 0;
-          const nativeTurn = document.documentElement.dataset.pgNativeTurn;
-          const transitionActive = nativeTurn === "forward" || nativeTurn === "reverse";
-          const atProfileEndpoint =
-            wrapperWidth <= Math.max(1, window.innerWidth) * 0.01 &&
-            Math.abs(anchorTop - navHeight) <= 4;
-
-          if (atProfileEndpoint) {
-            if (!endpointSince) endpointSince = now;
-          } else {
-            endpointSince = 0;
-          }
-
-          if (
-            transitionActive &&
-            atProfileEndpoint &&
-            now - endpointSince >= 380 &&
-            now - startedAt >= 600
-          ) {
-            document.documentElement.dataset.pgNativeTurn = "profile";
-          }
-
-          const currentTurn = document.documentElement.dataset.pgNativeTurn;
-          const currentTransitionActive =
-            currentTurn === "forward" || currentTurn === "reverse";
-          if (!currentTransitionActive && currentTurn === "profile" && !atProfileEndpoint) {
-            setScroll(scrollEngine, getTargetTop(section));
-          }
-
-          const stableLongEnough =
-            atProfileEndpoint &&
-            !currentTransitionActive &&
-            endpointSince &&
-            now - endpointSince >= 480 &&
-            now - startedAt >= 1800;
-          if (stableLongEnough) {
-            resolve(true);
-            return;
-          }
-
-          if (now - startedAt >= 4200) {
-            setScroll(scrollEngine, getTargetTop(section));
-            document.documentElement.dataset.pgNativeTurn = "profile";
-            resolve(true);
-            return;
-          }
-
-          requestAnimationFrame(step);
-        };
-
-        requestAnimationFrame(step);
-      });
-
-    const glideTo = (section, requestId) => new Promise((resolve) => {
-      cancelActiveGlide();
-      window.cancelAnimationFrame(window.__portfolioContactGlideRaf);
-      window.clearTimeout(window.__pgContactJumpLockTimer);
-      delete document.documentElement.dataset.pgContactJumpLock;
-      document.documentElement.dataset.pgNavJumpLock = "true";
-
-      if (window.location.hash) {
-        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-      }
-
-      const scrollEngine = window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
-      if (scrollEngine && !window.__portfolioLenis) window.__portfolioLenis = scrollEngine;
-      scrollEngine?.start?.();
-      const start = window.scrollY;
-      const destination = getTargetTop(section);
-      const distance = destination - start;
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      let completed = false;
-
-      const finish = (success) => {
-        if (window.__portfolioNavGlideResolve === finish) {
-          delete window.__portfolioNavGlideResolve;
-        }
-        resolve(success);
-      };
-      window.__portfolioNavGlideResolve = finish;
-
-      const complete = (success = true) => {
-        if (completed) return;
-        completed = true;
-        window.clearTimeout(window.__pgNavJumpLockTimer);
-        if (!success || requestId !== window.__portfolioNavRequestId) {
-          finish(false);
-          return;
-        }
-        setScroll(scrollEngine, getTargetTop(section));
-        delete document.documentElement.dataset.pgNavJumpLock;
-        window.dispatchEvent(new CustomEvent("portfolio:nav-glide-complete", {
-          detail: { target: `#${section.id}` },
-        }));
-        finish(true);
-      };
-
-      if (reducedMotion || Math.abs(distance) < 2) {
-        setScroll(scrollEngine, destination);
-        complete();
-        return;
-      }
-
-      const duration = 750;
-      const startedAt = performance.now();
-      const step = (now) => {
-        if (requestId !== window.__portfolioNavRequestId) {
-          window.__portfolioNavGlideRaf = 0;
-          complete(false);
-          return;
-        }
-        const progress = Math.min(1, (now - startedAt) / duration);
-        const eased = 1 - Math.pow(1 - progress, 4);
-        setScroll(scrollEngine, start + distance * eased);
-        if (progress < 1) {
-          window.__portfolioNavGlideRaf = requestAnimationFrame(step);
-          return;
-        }
-        window.__portfolioNavGlideRaf = 0;
-        complete();
-      };
-      window.__portfolioNavGlideRaf = requestAnimationFrame(step);
-      window.__pgNavJumpLockTimer = window.setTimeout(complete, 1100);
-    });
-
-    let lastSectionJump = 0;
-    const activate = (event) => {
-      const link = event.target?.closest?.("[data-pg-nav-target]");
-      if (!link || !nav.contains(link)) return;
-      if (event.type === "pointerdown" && event.button !== 0) return;
-      if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      const now = Date.now();
-      if (now - lastSectionJump < 600) return;
-      const section = document.querySelector(link.dataset.pgNavTarget);
-      if (!section) return;
-      lastSectionJump = now;
-      const requestId = ++window.__portfolioNavRequestId;
-      cancelActiveGlide();
-      waitForPageTurnBoundary(requestId).then(async (ready) => {
-        if (!ready || requestId !== window.__portfolioNavRequestId) return;
-        const firstGlideComplete = await glideTo(section, requestId);
-        if (!firstGlideComplete || requestId !== window.__portfolioNavRequestId) return;
-
-        if (section.id === "pg-profile-anchor") {
-          await stabilizeProfileEndpoint(section, requestId);
-          return;
-        }
-
-        const pageTurnSettled = await waitForPageTurnBoundary(requestId);
-        if (!pageTurnSettled || requestId !== window.__portfolioNavRequestId) return;
-
-        if (section !== selectedWork) return;
-
-        await glideTo(section, requestId);
-      });
-    };
-
-    nav.addEventListener("pointerdown", activate, true);
-    nav.addEventListener("click", activate, true);
-    nav.addEventListener("keydown", activate, true);
-
-    if (profile && !window.__pgProfileEndpointRepairReady) {
+    if (!window.__pgProfileEndpointRepairReady) {
       window.__pgProfileEndpointRepairReady = true;
       let repairTimer = 0;
-
       const repairProfileEndpoint = () => {
         repairTimer = 0;
         if (
@@ -1089,17 +880,28 @@
         const scrollEngine =
           window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
         setScroll(scrollEngine, getTargetTop(profile));
+        requestIndicatorSync();
       };
-
       const scheduleProfileEndpointRepair = () => {
         window.clearTimeout(repairTimer);
         repairTimer = window.setTimeout(repairProfileEndpoint, 640);
       };
-
-      window.addEventListener("scroll", scheduleProfileEndpointRepair, { passive: true });
       window.addEventListener("wheel", scheduleProfileEndpointRepair, { passive: true });
       window.addEventListener("touchend", scheduleProfileEndpointRepair, { passive: true });
     }
+
+    new MutationObserver(requestIndicatorSync).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-pg-native-turn"],
+    });
+    window.addEventListener("scroll", requestIndicatorSync, { passive: true });
+    window.addEventListener("resize", requestIndicatorSync, { passive: true });
+    window.addEventListener("site:ready", requestIndicatorSync, { once: true });
+    window.addEventListener("portfolio:project-open", requestIndicatorSync);
+    window.addEventListener("portfolio:project-close", requestIndicatorSync);
+
+    restoreSelectedWorkReturn();
+    requestIndicatorSync();
   }
 
   function setupContactNavLink() {
