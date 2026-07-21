@@ -1455,6 +1455,13 @@
     requestUpdate();
   }
 
+  function setupLocalTimelineAssets() {
+    document.querySelectorAll("img.sealicon").forEach((icon) => {
+      icon.removeAttribute("data-src");
+      icon.src = "assets/timeline/senior-designer-seal.svg";
+    });
+  }
+
   function setupExternalNavigationGuard() {
     if (document.documentElement.dataset.pgExternalGuardReady === "true") return;
     document.documentElement.dataset.pgExternalGuardReady = "true";
@@ -2315,6 +2322,7 @@
   setupPrimaryNavFeedback();
   setupPrimarySectionNav();
   setupContactNavLink();
+  setupLocalTimelineAssets();
   setupExternalNavigationGuard();
   setupProjectPageSnap();
   setupContactOpening();
