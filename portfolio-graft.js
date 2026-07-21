@@ -1856,6 +1856,8 @@
     let touchDetailLocked = false;
     let touchDetailScrollY = 0;
     let touchBodyStyle = null;
+    let projectOpenPhase = "idle";
+    let openAlignmentToken = 0;
 
     const touchNavigationQuery = window.matchMedia("(pointer: coarse), (hover: none)");
     const prefersTouchNavigation = () => touchNavigationQuery.matches
@@ -2028,7 +2030,10 @@
       const enabled = usesTouchProjectLayout();
       projectRoot.classList.toggle("has-touch-project-nav", enabled);
       touchNav.setAttribute("aria-hidden", String(!enabled));
-      setTouchDetailLock(enabled && projectRoot.classList.contains("is-work"));
+      const shouldLockOpenProject = enabled
+        && projectRoot.classList.contains("is-work")
+        && projectOpenPhase === "open";
+      setTouchDetailLock(shouldLockOpenProject);
       renderTouchNavigation();
     };
 
@@ -2069,29 +2074,55 @@
       requestLayout();
     };
 
-    const cancelOpenAlignment = () => {
-      if (openAlignRaf) cancelAnimationFrame(openAlignRaf);
-      openAlignRaf = 0;
+    const clearOpenAlignmentState = () => {
+      projectRoot.classList.remove("is-aligning");
+      delete document.documentElement.dataset.pgProjectOpening;
     };
 
-    const alignOpenProject = () => {
-      cancelOpenAlignment();
+    const cancelOpenAlignment = ({ preserveOpen = true } = {}) => {
+      openAlignmentToken += 1;
+      if (openAlignRaf) cancelAnimationFrame(openAlignRaf);
+      openAlignRaf = 0;
+      clearOpenAlignmentState();
+      if (projectOpenPhase !== "aligning") return;
+      projectOpenPhase = preserveOpen && projectRoot.classList.contains("is-work") ? "open" : "idle";
+      if (projectOpenPhase === "open") setTouchDetailLock(true);
+    };
+
+    const getOpenProjectDestination = () => {
       const navHeight = document.querySelector(".pg-nav")?.getBoundingClientRect().height || 0;
-      const phoneFrame = window.matchMedia("(max-width: 820px)").matches;
       const compactFrame = window.matchMedia("(max-width: 1280px), (max-height: 900px)").matches;
       const laptopFrame = window.matchMedia("(min-width: 821px) and (max-width: 1280px), (min-width: 821px) and (max-height: 900px)").matches;
       const navOffset = laptopFrame ? 0 : compactFrame ? Math.min(18, navHeight * 0.28) : navHeight;
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      const destination = Math.max(0, Math.min(slot.getBoundingClientRect().top + window.scrollY - navOffset, maxScroll));
+      return Math.max(0, Math.min(slot.getBoundingClientRect().top + window.scrollY - navOffset, maxScroll));
+    };
+
+    const finishOpenAlignment = (token) => {
+      if (token !== openAlignmentToken || !projectRoot.classList.contains("is-work")) return;
+      openAlignRaf = 0;
+      window.scrollTo(0, getOpenProjectDestination());
+      clearOpenAlignmentState();
+      projectOpenPhase = "open";
+      setTouchDetailLock(true);
+    };
+
+    const alignOpenProject = (token) => {
+      if (token !== openAlignmentToken || projectOpenPhase !== "aligning") return;
+      const phoneFrame = window.matchMedia("(max-width: 820px)").matches;
+      const compactFrame = window.matchMedia("(max-width: 1280px), (max-height: 900px)").matches;
+      const destination = getOpenProjectDestination();
       const start = window.scrollY;
       const distance = destination - start;
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(distance) < 2) {
         window.scrollTo(0, destination);
+        finishOpenAlignment(token);
         return;
       }
       const duration = phoneFrame ? 420 : compactFrame ? 620 : 780;
       const startedAt = performance.now();
       const step = (now) => {
+        if (token !== openAlignmentToken || projectOpenPhase !== "aligning") return;
         const progress = Math.min(1, (now - startedAt) / duration);
         const eased = phoneFrame ? progress * progress * (3 - 2 * progress) : 1 - Math.pow(1 - progress, 4);
         window.scrollTo(0, start + distance * eased);
@@ -2099,9 +2130,22 @@
           openAlignRaf = requestAnimationFrame(step);
           return;
         }
-        openAlignRaf = 0;
+        finishOpenAlignment(token);
       };
       openAlignRaf = requestAnimationFrame(step);
+    };
+
+    const beginOpenAlignment = () => {
+      cancelOpenAlignment({ preserveOpen: false });
+      setTouchDetailLock(false);
+      projectOpenPhase = "aligning";
+      projectRoot.classList.add("is-aligning");
+      document.documentElement.dataset.pgProjectOpening = "true";
+      const token = ++openAlignmentToken;
+      openAlignRaf = requestAnimationFrame(() => {
+        if (token !== openAlignmentToken || projectOpenPhase !== "aligning") return;
+        openAlignRaf = requestAnimationFrame(() => alignOpenProject(token));
+      });
     };
 
     const setMode = (mode) => {
@@ -2111,10 +2155,10 @@
       slot.classList.toggle("pg-project-open", workOpen);
       syncCardStates();
       if (workOpen) {
-        setTouchDetailLock(true);
-        requestAnimationFrame(() => alignOpenProject());
+        if (!wasOpen) beginOpenAlignment();
       } else {
-        cancelOpenAlignment();
+        projectOpenPhase = "idle";
+        cancelOpenAlignment({ preserveOpen: false });
         setTouchDetailLock(false);
       }
       if (workOpen !== wasOpen) {
@@ -2125,6 +2169,7 @@
     };
 
     const openWork = (index) => {
+      if (projectOpenPhase === "aligning") return;
       selectProject(index, { snap: true });
       setMode("work");
     };
@@ -2136,6 +2181,7 @@
     };
 
     const moveTouchProject = (direction) => {
+      if (projectOpenPhase === "aligning") return;
       const now = performance.now();
       if (now < touchMoveLockedUntil) return;
       const next = clampIndex(selected + direction);
@@ -2277,7 +2323,7 @@
       setMode("home");
     });
     window.addEventListener("portfolio:return-selected-work", () => {
-      cancelOpenAlignment();
+      cancelOpenAlignment({ preserveOpen: false });
       selectProject(0, { snap: true });
       setMode("home");
     });
@@ -2357,6 +2403,7 @@
       target?.closest?.(".pg-project__touch-nav, .pg-project__close, .pg-project__cta");
 
     const beginProjectGesture = ({ source, id, x, y }) => {
+      if (projectOpenPhase === "aligning") return false;
       cancelOpenAlignment();
       touchGesture = {
         source,
@@ -2368,6 +2415,7 @@
         velocityX: 0,
         lock: "pending"
       };
+      return true;
     };
 
     const updateProjectGesture = (clientX, clientY, event) => {
@@ -2442,6 +2490,10 @@
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (isTouchGestureControl(event.target)) return;
       if (event.clientX <= 24 || event.clientX >= window.innerWidth - 24) return;
+      if (projectOpenPhase === "aligning") {
+        if (event.cancelable) event.preventDefault();
+        return;
+      }
       if (touchDetailLocked && event.cancelable) event.preventDefault();
       beginProjectGesture({
         source: "pointer",
@@ -2482,6 +2534,10 @@
       if (isTouchGestureControl(event.target)) return;
       const touch = event.changedTouches[0];
       if (!touch || touch.clientX <= 18 || touch.clientX >= window.innerWidth - 18) return;
+      if (projectOpenPhase === "aligning") {
+        if (event.cancelable) event.preventDefault();
+        return;
+      }
       if (touchDetailLocked && event.cancelable) event.preventDefault();
       beginProjectGesture({
         source: "touch",
@@ -2559,16 +2615,15 @@
     window.addEventListener("resize", () => {
       updateTouchNavigationMode();
       requestLayout();
-      if (projectRoot.classList.contains("is-work")) {
-        if (window.matchMedia("(max-width: 820px)").matches) {
-          cancelOpenAlignment();
-          return;
-        }
-        window.setTimeout(() => alignOpenProject(), 80);
-      }
+      if (!projectRoot.classList.contains("is-work")) return;
+      if (projectOpenPhase === "aligning" || touchDetailLocked) return;
+      window.setTimeout(() => {
+        if (!projectRoot.classList.contains("is-work")) return;
+        if (projectOpenPhase !== "open" || touchDetailLocked) return;
+        beginOpenAlignment();
+      }, 80);
     }, { passive: true });
     touchNavigationQuery.addEventListener?.("change", updateTouchNavigationMode);
-    window.addEventListener("touchstart", cancelOpenAlignment, { passive: true });
     updateTouchNavigationMode();
     selectProject(0, { snap: true });
   }
@@ -2592,7 +2647,8 @@
     const getResetThreshold = () => (isPhoneFrame() ? 0.14 : isCompactFrame() ? 0.24 : 0.35);
     const navigationBusy = () => {
       return document.documentElement.dataset.pgNavJumpLock === "true" ||
-        document.documentElement.dataset.pgProjectTouchLock === "true";
+        document.documentElement.dataset.pgProjectTouchLock === "true" ||
+        document.documentElement.dataset.pgProjectOpening === "true";
     };
 
     const getVisibleRatio = () => {
