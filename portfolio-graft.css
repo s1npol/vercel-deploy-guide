@@ -1290,7 +1290,31 @@ body > .w-layout-vflex.gap-24 {
 }
 
 .pg-project.has-touch-project-nav {
+  touch-action: auto;
+}
+
+.pg-project.has-touch-project-nav .pg-project__carousel {
   touch-action: pan-y;
+  overscroll-behavior-x: contain;
+}
+
+.pg-project.has-touch-project-nav.is-work,
+.pg-project.has-touch-project-nav.is-work .pg-project__detail {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.pg-project.has-touch-project-nav .pg-project__touch-nav,
+.pg-project.has-touch-project-nav .pg-project__touch-control,
+.pg-project.has-touch-project-nav .pg-project__close,
+.pg-project.has-touch-project-nav .pg-project__cta {
+  touch-action: manipulation;
+}
+
+html.pg-project-touch-locked,
+html.pg-project-touch-locked body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
 }
 
 .pg-project.has-touch-project-nav .pg-project__touch-nav {

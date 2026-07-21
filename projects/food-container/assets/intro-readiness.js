@@ -6,6 +6,9 @@
   const LOADING_LABEL = "LOADING";
   const PROJECT_HERO_SRC = "./assets/daily-lunch-screen-hero.webp";
   const PROJECT_ENTRY_KEY = "aethera-project-entered";
+  const PROJECT_WARM_KEY = "aethera-project-assets-warm";
+  const MAIN_ENTRY_KEY = "sinpol:project-entry";
+  const SELECTED_WORK_RETURN_KEY = "sinpol:selected-work-return";
   const SAFETY_TIMEOUT_MS = 12000;
   const MINIMUM_LOADING_MS = 650;
   const FONT_TIMEOUT_MS = 2200;
@@ -23,9 +26,15 @@
   const withTimeout = (promise, duration) =>
     Promise.race([promise.catch(() => undefined), wait(duration)]);
 
+  const resumeProjectContent = window.location.hash === "#project";
   const isReturningToProject = (() => {
     try {
-      return window.sessionStorage.getItem(PROJECT_ENTRY_KEY) === "true";
+      if (resumeProjectContent) {
+        window.sessionStorage.setItem(PROJECT_ENTRY_KEY, "true");
+      } else {
+        window.sessionStorage.removeItem(PROJECT_ENTRY_KEY);
+      }
+      return window.sessionStorage.getItem(PROJECT_WARM_KEY) === "true";
     } catch {
       return false;
     }
@@ -190,6 +199,9 @@
   const setReadyState = () => {
     readinessResolved = true;
     window.clearTimeout(safetyTimer);
+    try {
+      window.sessionStorage.setItem(PROJECT_WARM_KEY, "true");
+    } catch {}
 
     const button = document.querySelector(BUTTON_SELECTOR);
     if (!isAppButton(button)) return;
@@ -214,6 +226,49 @@
       if (isReady || !event.target.closest?.(BUTTON_SELECTOR)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+    },
+    true,
+  );
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const backLink = event.target.closest?.(".project-back-link");
+      if (!backLink || event.defaultPrevented) return;
+      if (event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const fallbackUrl = new URL("../../index.html?return=selected-work", window.location.href);
+      let cameFromMainPortfolio = false;
+      try {
+        const entry = JSON.parse(window.sessionStorage.getItem(MAIN_ENTRY_KEY) || "null");
+        const referrer = document.referrer ? new URL(document.referrer) : null;
+        cameFromMainPortfolio = Boolean(
+          entry &&
+          referrer &&
+          referrer.origin === window.location.origin &&
+          /\/index\.html$/.test(referrer.pathname)
+        );
+        window.sessionStorage.setItem(SELECTED_WORK_RETURN_KEY, "pending");
+      } catch {}
+
+      if (!cameFromMainPortfolio || window.history.length <= 1) {
+        window.location.assign(fallbackUrl.href);
+        return;
+      }
+
+      let pageHidden = false;
+      window.addEventListener("pagehide", () => {
+        pageHidden = true;
+      }, { once: true });
+      window.history.back();
+      window.setTimeout(() => {
+        if (!pageHidden && document.visibilityState === "visible") {
+          window.location.assign(fallbackUrl.href);
+        }
+      }, 900);
     },
     true,
   );

@@ -2,6 +2,29 @@
   const root = document.querySelector(".portfolio-graft");
   if (!root) return;
 
+  const SELECTED_WORK_RETURN_KEY = "sinpol:selected-work-return";
+  const PROJECT_ENTRY_KEY = "sinpol:project-entry";
+  const hasSelectedWorkReturnRequest = () => {
+    const url = new URL(window.location.href);
+    let pendingReturn = "";
+    try {
+      pendingReturn = window.sessionStorage.getItem(SELECTED_WORK_RETURN_KEY) || "";
+    } catch (error) {}
+    return (
+      pendingReturn === "pending" ||
+      url.searchParams.get("return") === "selected-work" ||
+      url.hash === "#pg-selected-work"
+    );
+  };
+
+  if (hasSelectedWorkReturnRequest()) {
+    document.documentElement.dataset.pgReturnTarget = "selected-work";
+    document.documentElement.dataset.pgNavJumpLock = "true";
+    try {
+      window.history.scrollRestoration = "manual";
+    } catch (error) {}
+  }
+
   const canvas = root.querySelector("#pgVideoSource");
   const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
   const heroVideo = root.querySelector("#pgHeroVideo");
@@ -547,6 +570,7 @@
     const timelineProgress = Array.from(
       document.querySelectorAll(".timeline_progress_main, .timeline_progress")
     );
+    const selectedWorkSection = document.querySelector(".home-benefits-blank");
     const profileTarget =
       document.querySelector("[back-to-lenis]") ||
       document.querySelector(".home-tabs_layout") ||
@@ -607,33 +631,65 @@
       }
     };
 
+    const selectedWorkReturnActive = () =>
+      html.dataset.pgReturnCooldown === "true" ||
+      (
+        html.dataset.pgReturnTarget === "selected-work" &&
+        html.dataset.pgReturnReady !== "true"
+      );
+
+    const applyExperienceVisualState = () => {
+      window.gsap?.killTweensOf?.(wrapper);
+      if (window.gsap) {
+        window.gsap.set(wrapper, {
+          width: "100%",
+          opacity: 1,
+          position: "fixed",
+          y: "-100%",
+        });
+      } else {
+        wrapper.style.width = "100%";
+        wrapper.style.opacity = "1";
+        wrapper.style.position = "fixed";
+        wrapper.style.transform = "translate3d(0,-100%,0)";
+      }
+      revealExperienceContent();
+    };
+
+    const prepareSelectedWorkReturn = () => {
+      if (!selectedWorkReturnActive()) return false;
+      transitionToken += 1;
+      transitionStartedAt = 0;
+      window.clearTimeout(recoveryTimer);
+      applyExperienceVisualState();
+      html.dataset.pgPageTurnRecovery = "return-bypass";
+      html.dataset.pgPageTurnRecovered = "selected-work-return";
+      if (html.dataset.pgNativeTurn !== "experience") {
+        html.dataset.pgNativeTurn = "experience";
+      }
+      return true;
+    };
+
     const finalizeExperience = (recovered = false) => {
+      if (prepareSelectedWorkReturn()) return;
       window.clearTimeout(recoveryTimer);
       const viewportHeight = Math.max(1, window.innerHeight);
       const wrapperRect = wrapper.getBoundingClientRect();
       const headingOpacity = Number.parseFloat(getComputedStyle(timelineHeading).opacity) || 0;
+      const selectedWorkReached = Boolean(
+        selectedWorkSection &&
+        selectedWorkSection.getBoundingClientRect().top <= viewportHeight * 0.72
+      );
       const visuallyIncomplete =
         wrapperRect.top > -viewportHeight * 0.78 ||
         headingOpacity < 0.18;
 
       if (recovered || visuallyIncomplete) {
-        window.gsap?.killTweensOf?.(wrapper);
-        if (window.gsap) {
-          window.gsap.set(wrapper, {
-            width: "100%",
-            opacity: 1,
-            position: "fixed",
-            y: "-100%",
-          });
-        } else {
-          wrapper.style.width = "100%";
-          wrapper.style.opacity = "1";
-          wrapper.style.position = "fixed";
-          wrapper.style.transform = "translate3d(0,-100%,0)";
+        applyExperienceVisualState();
+        if (!selectedWorkReached) {
+          const hostTop = experienceHost.getBoundingClientRect().top + window.scrollY;
+          setScroll(hostTop + Math.min(100, viewportHeight * 0.15));
         }
-        revealExperienceContent();
-        const hostTop = experienceHost.getBoundingClientRect().top + window.scrollY;
-        setScroll(hostTop + Math.min(100, viewportHeight * 0.15));
         html.dataset.pgPageTurnRecovered = "experience";
       } else {
         getScrollEngine()?.start?.();
@@ -646,6 +702,7 @@
     };
 
     const finalizeProfile = (recovered = false) => {
+      if (prepareSelectedWorkReturn()) return;
       window.clearTimeout(recoveryTimer);
       if (recovered) {
         window.gsap?.killTweensOf?.(wrapper);
@@ -693,6 +750,7 @@
     };
 
     const reconcileState = () => {
+      if (prepareSelectedWorkReturn()) return;
       const state = html.dataset.pgNativeTurn || "profile";
       if (state === "forward" || state === "reverse") {
         armRecovery(state);
@@ -724,6 +782,7 @@
     };
 
     window.addEventListener("pageshow", () => window.setTimeout(reconcileState, 240));
+    window.addEventListener("portfolio:prepare-selected-work-return", prepareSelectedWorkReturn);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) recoverIfStillTransitioning();
     });
@@ -1005,66 +1064,90 @@
       syncFrame = requestAnimationFrame(syncSectionIndicator);
     };
 
+    let selectedWorkReturnInProgress = false;
     const restoreSelectedWorkReturn = () => {
-      if (window.location.hash !== "#pg-selected-work") return;
+      if (!hasSelectedWorkReturnRequest() || selectedWorkReturnInProgress) return;
+      selectedWorkReturnInProgress = true;
 
-      document.documentElement.dataset.pgReturnTarget = "selected-work";
-      document.documentElement.dataset.pgNavJumpLock = "true";
+      const html = document.documentElement;
+      html.dataset.pgReturnTarget = "selected-work";
+      html.dataset.pgReturnReady = "false";
+      html.dataset.pgNavJumpLock = "true";
       try {
         window.history.scrollRestoration = "manual";
       } catch (error) {}
 
-      let returnStateRestored = false;
-      const restoreState = () => {
-        if (returnStateRestored) return;
-        returnStateRestored = true;
-        window.dispatchEvent(new CustomEvent("portfolio:return-selected-work"));
+      window.dispatchEvent(new CustomEvent("portfolio:prepare-selected-work-return"));
+      window.dispatchEvent(new CustomEvent("portfolio:return-selected-work"));
+
+      const finishReturn = () => {
+        html.dataset.pgReturnCooldown = "true";
+        html.dataset.pgNativeTurn = "experience";
+        html.dataset.pgReturnReady = "true";
+        delete html.dataset.pgNavJumpLock;
+        delete html.dataset.pgReturnTarget;
+        try {
+          window.sessionStorage.removeItem(SELECTED_WORK_RETURN_KEY);
+          window.sessionStorage.removeItem(PROJECT_ENTRY_KEY);
+        } catch (error) {}
+
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("return");
+        if (cleanUrl.hash === "#pg-selected-work") cleanUrl.hash = "";
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`
+        );
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("portfolio:prepare-selected-work-return"));
+          const scrollEngine =
+            window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+          if (scrollEngine && !window.__portfolioLenis) window.__portfolioLenis = scrollEngine;
+          scrollEngine?.start?.();
+          setScroll(scrollEngine, getTargetTop(selectedWork));
+          window.ScrollTrigger?.update?.();
+          requestAnimationFrame(() => {
+            html.dataset.pgNativeTurn = "experience";
+            delete html.dataset.pgReturnCooldown;
+            window.ScrollTrigger?.update?.();
+            requestIndicatorSync();
+          });
+        }, 6200);
+        selectedWorkReturnInProgress = false;
+        requestIndicatorSync();
       };
-      const align = (refresh = false) => {
-        restoreState();
+
+      const alignOnce = () => {
+        window.dispatchEvent(new CustomEvent("portfolio:prepare-selected-work-return"));
+        window.dispatchEvent(new CustomEvent("portfolio:return-selected-work"));
         const scrollEngine =
           window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
         if (scrollEngine && !window.__portfolioLenis) window.__portfolioLenis = scrollEngine;
         scrollEngine?.start?.();
-        if (refresh) window.ScrollTrigger?.refresh?.();
-        setScroll(scrollEngine, getTargetTop(selectedWork));
-        requestIndicatorSync();
+        window.ScrollTrigger?.refresh?.();
+        requestAnimationFrame(() => {
+          setScroll(scrollEngine, getTargetTop(selectedWork));
+          window.ScrollTrigger?.update?.();
+          window.dispatchEvent(new CustomEvent("portfolio:prepare-selected-work-return"));
+          window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("portfolio:prepare-selected-work-return"));
+            setScroll(scrollEngine, getTargetTop(selectedWork));
+            window.ScrollTrigger?.update?.();
+            requestAnimationFrame(finishReturn);
+          }, 320);
+        });
       };
-      let returnSettleRaf = 0;
-      let returnSettleCancelled = false;
-      const finishReturn = () => {
-        if (returnSettleRaf) cancelAnimationFrame(returnSettleRaf);
-        returnSettleRaf = 0;
-        document.documentElement.dataset.pgReturnReady = "true";
-        delete document.documentElement.dataset.pgNavJumpLock;
-        requestIndicatorSync();
-      };
-      const settleReturn = () => {
-        align(true);
-        const startedAt = performance.now();
-        const step = (now) => {
-          if (returnSettleCancelled || now - startedAt >= 2600) {
-            finishReturn();
-            return;
-          }
-          align(false);
-          returnSettleRaf = requestAnimationFrame(step);
-        };
-        returnSettleRaf = requestAnimationFrame(step);
-      };
-      const cancelSettleOnInput = () => {
-        returnSettleCancelled = true;
-      };
-      ["wheel", "touchstart", "pointerdown", "keydown"].forEach((eventName) => {
-        window.addEventListener(eventName, cancelSettleOnInput, { once: true, passive: true });
-      });
 
-      requestAnimationFrame(() => align(false));
       if (document.body.classList.contains("site-loading")) {
-        window.addEventListener("site:before-reveal", () => align(true), { once: true });
-        window.addEventListener("site:ready", settleReturn, { once: true });
+        window.addEventListener("site:before-reveal", () => {
+          window.dispatchEvent(new CustomEvent("portfolio:prepare-selected-work-return"));
+        }, { once: true });
+        window.addEventListener("site:ready", () => {
+          requestAnimationFrame(() => requestAnimationFrame(alignOnce));
+        }, { once: true });
       } else {
-        requestAnimationFrame(settleReturn);
+        requestAnimationFrame(() => requestAnimationFrame(alignOnce));
       }
     };
 
@@ -1115,6 +1198,7 @@
     window.addEventListener("portfolio:project-open", requestIndicatorSync);
     window.addEventListener("portfolio:project-close", requestIndicatorSync);
 
+    window.addEventListener("pageshow", restoreSelectedWorkReturn);
     restoreSelectedWorkReturn();
     requestIndicatorSync();
   }
@@ -1769,11 +1853,73 @@
     let touchGesture = null;
     let suppressProjectClickUntil = 0;
     let touchMoveLockedUntil = 0;
+    let touchDetailLocked = false;
+    let touchDetailScrollY = 0;
+    let touchBodyStyle = null;
 
     const touchNavigationQuery = window.matchMedia("(pointer: coarse), (hover: none)");
     const prefersTouchNavigation = () => touchNavigationQuery.matches
       || navigator.maxTouchPoints > 0
       || document.documentElement.classList.contains("w-mod-touch");
+    const usesTouchProjectLayout = () =>
+      window.matchMedia("(max-width: 1024px)").matches || prefersTouchNavigation();
+
+    const getScrollEngine = () =>
+      window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+
+    const preventLockedTouchScroll = (event) => {
+      if (!touchDetailLocked || !event.cancelable) return;
+      event.preventDefault();
+    };
+
+    const setTouchDetailLock = (locked) => {
+      const shouldLock = Boolean(locked && usesTouchProjectLayout());
+      if (shouldLock === touchDetailLocked) return;
+      touchDetailLocked = shouldLock;
+      const html = document.documentElement;
+      const body = document.body;
+      if (shouldLock) {
+        touchDetailScrollY = window.scrollY;
+        touchBodyStyle = {
+          position: body.style.position,
+          top: body.style.top,
+          left: body.style.left,
+          right: body.style.right,
+          width: body.style.width,
+        };
+        html.classList.add("pg-project-touch-locked");
+        html.dataset.pgProjectTouchLock = "true";
+        html.dataset.pgNavJumpLock = "true";
+        body.style.position = "fixed";
+        body.style.top = `${-touchDetailScrollY}px`;
+        body.style.left = "0";
+        body.style.right = "0";
+        body.style.width = "100%";
+        getScrollEngine()?.stop?.();
+        return;
+      }
+
+      html.classList.remove("pg-project-touch-locked");
+      delete html.dataset.pgProjectTouchLock;
+      if (html.dataset.pgReturnTarget !== "selected-work") {
+        delete html.dataset.pgNavJumpLock;
+      }
+      if (touchBodyStyle) {
+        body.style.position = touchBodyStyle.position;
+        body.style.top = touchBodyStyle.top;
+        body.style.left = touchBodyStyle.left;
+        body.style.right = touchBodyStyle.right;
+        body.style.width = touchBodyStyle.width;
+        touchBodyStyle = null;
+      }
+      getScrollEngine()?.start?.();
+      window.scrollTo(0, touchDetailScrollY);
+    };
+
+    window.addEventListener("touchmove", preventLockedTouchScroll, {
+      passive: false,
+      capture: true,
+    });
 
     const clampIndex = (value) => Math.max(0, Math.min(projects.length - 1, value));
 
@@ -1875,13 +2021,14 @@
 
       touchPrev.disabled = selected === 0;
       touchNext.disabled = selected === projects.length - 1;
-      touchNav.setAttribute("aria-hidden", String(!prefersTouchNavigation()));
+      touchNav.setAttribute("aria-hidden", String(!usesTouchProjectLayout()));
     };
 
     const updateTouchNavigationMode = () => {
-      const enabled = prefersTouchNavigation();
+      const enabled = usesTouchProjectLayout();
       projectRoot.classList.toggle("has-touch-project-nav", enabled);
       touchNav.setAttribute("aria-hidden", String(!enabled));
+      setTouchDetailLock(enabled && projectRoot.classList.contains("is-work"));
       renderTouchNavigation();
     };
 
@@ -1959,13 +2106,21 @@
 
     const setMode = (mode) => {
       const workOpen = mode === "work";
+      const wasOpen = projectRoot.classList.contains("is-work");
       projectRoot.classList.toggle("is-work", workOpen);
       slot.classList.toggle("pg-project-open", workOpen);
       syncCardStates();
       if (workOpen) {
+        setTouchDetailLock(true);
         requestAnimationFrame(() => alignOpenProject());
       } else {
         cancelOpenAlignment();
+        setTouchDetailLock(false);
+      }
+      if (workOpen !== wasOpen) {
+        window.dispatchEvent(new CustomEvent(
+          workOpen ? "portfolio:project-open" : "portfolio:project-close"
+        ));
       }
     };
 
@@ -2091,6 +2246,7 @@
       card.setAttribute("aria-pressed", "false");
       card.setAttribute("aria-expanded", "false");
       card.innerHTML = `<img src="${project.image}" loading="${index < 3 ? "eager" : "lazy"}" alt=""><span class="pg-project__card-label">${project.cardLabel || `${pad(index + 1)} / ${project.cardTitle}`}</span>`;
+      card.querySelector("img")?.setAttribute("draggable", "false");
       card.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -2113,7 +2269,13 @@
       moveTouchProject(1);
     });
 
-    slot.querySelector("[data-project-home]").addEventListener("click", () => setMode("home"));
+    slot.querySelector("[data-project-home]").addEventListener("click", (event) => {
+      if (usesTouchProjectLayout() && projectRoot.classList.contains("is-work")) {
+        event.preventDefault();
+        return;
+      }
+      setMode("home");
+    });
     window.addEventListener("portfolio:return-selected-work", () => {
       cancelOpenAlignment();
       selectProject(0, { snap: true });
@@ -2128,6 +2290,20 @@
       detailCta.classList.remove("is-pressed");
       void detailCta.offsetWidth;
       detailCta.classList.add("is-pressed");
+      try {
+        window.sessionStorage.setItem(PROJECT_ENTRY_KEY, JSON.stringify({
+          href: window.location.href,
+          projectIndex: selected,
+          scrollY: window.scrollY,
+          createdAt: Date.now(),
+        }));
+        window.sessionStorage.removeItem(SELECTED_WORK_RETURN_KEY);
+      } catch (error) {}
+      window.history.replaceState(
+        { ...(window.history.state || {}), pgProjectEntry: true, pgProjectIndex: selected },
+        "",
+        window.location.href
+      );
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       window.setTimeout(() => {
         window.location.assign(projectHref);
@@ -2178,9 +2354,11 @@
     };
 
     projectRoot.addEventListener("pointerdown", (event) => {
-      if (!prefersTouchNavigation() || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;
+      if (!usesTouchProjectLayout()) return;
+      if (event.pointerType === "mouse" && event.button !== 0) return;
       if (event.target.closest(".pg-project__touch-nav, .pg-project__close, .pg-project__cta")) return;
       if (event.clientX <= 24 || event.clientX >= window.innerWidth - 24) return;
+      if (touchDetailLocked && event.cancelable) event.preventDefault();
       cancelOpenAlignment();
       touchGesture = {
         pointerId: event.pointerId,
@@ -2191,7 +2369,7 @@
         velocityX: 0,
         lock: "pending"
       };
-    }, { passive: true });
+    }, { passive: false });
 
     projectRoot.addEventListener("pointermove", (event) => {
       if (!touchGesture || event.pointerId !== touchGesture.pointerId) return;
@@ -2205,18 +2383,31 @@
       touchGesture.lastX = event.clientX;
       touchGesture.lastAt = now;
 
+      if (touchDetailLocked && event.cancelable) event.preventDefault();
+
       if (touchGesture.lock === "pending") {
-        if (Math.max(absX, absY) < 12) return;
-        if (absX > absY * 1.4) {
+        const dominantDistance = Math.max(absX, absY);
+        if (dominantDistance < 8) return;
+        if (absX >= absY * 1.08) {
           touchGesture.lock = "horizontal";
           projectRoot.setPointerCapture?.(event.pointerId);
-        } else if (absY > 10) {
+        } else if (!touchDetailLocked && absY >= 14 && absY >= absX * 1.18) {
           touchGesture.lock = "vertical";
           touchDragProgress = 0;
           return;
+        } else if (dominantDistance >= 24) {
+          if (absX >= absY) {
+            touchGesture.lock = "horizontal";
+            projectRoot.setPointerCapture?.(event.pointerId);
+          } else {
+            touchGesture.lock = touchDetailLocked ? "blocked" : "vertical";
+            touchDragProgress = 0;
+            return;
+          }
         }
       }
       if (touchGesture.lock !== "horizontal") return;
+      if (event.cancelable) event.preventDefault();
 
       const rect = projectRoot.getBoundingClientRect();
       const gap = Math.max(128, Math.min(210, rect.width * 0.145));
@@ -2225,25 +2416,26 @@
       const resistance = atStart || atEnd ? 0.24 : 1;
       touchDragProgress = Math.max(-0.88, Math.min(0.88, (dx / gap) * resistance));
       requestLayout();
-    }, { passive: true });
+    }, { passive: false });
 
     const finishTouchGesture = (event) => {
       if (!touchGesture || event.pointerId !== touchGesture.pointerId) return;
       const gesture = touchGesture;
       const dx = event.clientX - gesture.startX;
       const rect = projectRoot.getBoundingClientRect();
-      const distanceThreshold = Math.max(48, Math.min(76, rect.width * 0.16));
+      const distanceThreshold = Math.max(36, Math.min(52, rect.width * 0.11));
       const shouldMove = gesture.lock === "horizontal"
-        && (Math.abs(dx) >= distanceThreshold || Math.abs(gesture.velocityX) >= 0.45);
+        && (Math.abs(dx) >= distanceThreshold || Math.abs(gesture.velocityX) >= 0.35);
       resetTouchGesture();
       if (!shouldMove) return;
       suppressProjectClickUntil = performance.now() + 420;
       moveTouchProject(dx < 0 ? 1 : -1);
     };
 
-    projectRoot.addEventListener("pointerup", finishTouchGesture, { passive: true });
+    projectRoot.addEventListener("pointerup", finishTouchGesture, { passive: false });
     projectRoot.addEventListener("pointercancel", resetTouchGesture, { passive: true });
     projectRoot.addEventListener("lostpointercapture", resetTouchGesture, { passive: true });
+    projectRoot.addEventListener("dragstart", (event) => event.preventDefault());
     projectRoot.addEventListener("click", (event) => {
       if (performance.now() >= suppressProjectClickUntil) return;
       event.preventDefault();
@@ -2255,7 +2447,7 @@
 
     window.addEventListener("wheel", (event) => {
       if (!isInsideProjectPage(event)) return;
-      if (prefersTouchNavigation()) return;
+      if (usesTouchProjectLayout()) return;
       cancelOpenAlignment();
       const impulse = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       event.preventDefault();
@@ -2270,7 +2462,7 @@
 
     window.addEventListener("keydown", (event) => {
       if (!active) return;
-      if (event.key === "Escape") setMode("home");
+      if (event.key === "Escape" && !usesTouchProjectLayout()) setMode("home");
       if (event.key === "ArrowRight") moveProject(1);
       if (event.key === "ArrowLeft") moveProject(-1);
       if (event.key === "Enter" && !projectRoot.classList.contains("is-work")) openWork(selected);
@@ -2328,7 +2520,8 @@
     const getSnapThreshold = () => (isPhoneFrame() ? 0.74 : isCompactFrame() ? 0.44 : 0.55);
     const getResetThreshold = () => (isPhoneFrame() ? 0.14 : isCompactFrame() ? 0.24 : 0.35);
     const navigationBusy = () => {
-      return document.documentElement.dataset.pgNavJumpLock === "true";
+      return document.documentElement.dataset.pgNavJumpLock === "true" ||
+        document.documentElement.dataset.pgProjectTouchLock === "true";
     };
 
     const getVisibleRatio = () => {
@@ -2508,13 +2701,13 @@
   setupBottomReboundEffect();
   setupPortfolioNavLayer();
   setupPrimaryNavFeedback();
+  setupProjectPageSlot();
+  setupProjectPageSnap();
   setupPrimarySectionNav();
   setupContactNavLink();
   setupLocalTimelineAssets();
   setupExternalNavigationGuard();
-  setupProjectPageSnap();
   setupContactOpening();
-  setupProjectPageSlot();
   window.addEventListener("load", refreshHostScroll);
   refreshHostScroll();
 
