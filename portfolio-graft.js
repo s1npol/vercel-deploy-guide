@@ -481,9 +481,20 @@
   let hostRefreshQueued = false;
   let loadingRefreshCompleted = false;
   let webflowRefreshInitialized = false;
+  let pageTurnRefreshDeferred = false;
+
+  const pageTurnIsActive = () => {
+    const state = document.documentElement.dataset.pgNativeTurn;
+    return state === "forward" || state === "reverse";
+  };
+
   function refreshHostScroll() {
     if (!siteExperienceActive && loadingRefreshCompleted) return;
     if (hostRefreshQueued) return;
+    if (pageTurnIsActive()) {
+      pageTurnRefreshDeferred = true;
+      return;
+    }
     hostRefreshQueued = true;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       hostRefreshQueued = false;
@@ -516,6 +527,210 @@
       asset.addEventListener("loadedmetadata", queueRefresh, { once: true });
       asset.addEventListener("loadeddata", queueRefresh, { once: true });
     });
+
+    new MutationObserver(() => {
+      if (pageTurnIsActive() || !pageTurnRefreshDeferred) return;
+      pageTurnRefreshDeferred = false;
+      queueRefresh();
+    }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-pg-native-turn"],
+    });
+  }
+
+  function setupPageTurnRecovery() {
+    const html = document.documentElement;
+    const wrapper = document.querySelector(".canvas-wrapper");
+    const experienceHost = document.querySelector("[scrollto-lenis]");
+    const timelineHeading = document.querySelector(".timeline_heading");
+    const timelineColumns = Array.from(document.querySelectorAll(".timeline_colum_left"));
+    const timelineProgress = Array.from(
+      document.querySelectorAll(".timeline_progress_main, .timeline_progress")
+    );
+    const profileTarget =
+      document.querySelector("[back-to-lenis]") ||
+      document.querySelector(".home-tabs_layout") ||
+      document.querySelector("[home-trigger]");
+    if (!wrapper || !experienceHost || !timelineHeading || !profileTarget) return;
+    if (html.dataset.pgPageTurnRecoveryReady === "true") return;
+    html.dataset.pgPageTurnRecoveryReady = "true";
+
+    let recoveryTimer = 0;
+    let transitionToken = 0;
+    let transitionStartedAt = 0;
+
+    const getScrollEngine = () =>
+      window.__portfolioLenis || (typeof lenis !== "undefined" ? lenis : null);
+
+    const setScroll = (top) => {
+      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const safeTop = Math.max(0, Math.min(top, maxScroll));
+      const engine = getScrollEngine();
+      engine?.start?.();
+      if (engine?.scrollTo) engine.scrollTo(safeTop, { immediate: true, force: true });
+      else window.scrollTo(0, safeTop);
+    };
+
+    const requestSafeRefresh = () => {
+      pageTurnRefreshDeferred = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        window.ScrollTrigger?.update?.();
+        window.ScrollTrigger?.refresh?.();
+      }));
+    };
+
+    const revealExperienceContent = () => {
+      if (window.gsap) {
+        window.gsap.killTweensOf([timelineHeading, ...timelineColumns, ...timelineProgress]);
+        window.gsap.set(timelineHeading, {
+          opacity: 1,
+          y: "0%",
+          scale: 1,
+          clearProps: "visibility",
+        });
+        window.gsap.set(timelineColumns, {
+          opacity: 1,
+          y: "0%",
+          clearProps: "visibility",
+        });
+        window.gsap.set(timelineProgress, { opacity: 1, clearProps: "visibility" });
+      } else {
+        timelineHeading.style.opacity = "1";
+        timelineHeading.style.transform = "none";
+        timelineColumns.forEach((column) => {
+          column.style.opacity = "1";
+          column.style.transform = "none";
+        });
+        timelineProgress.forEach((progress) => {
+          progress.style.opacity = "1";
+        });
+      }
+    };
+
+    const finalizeExperience = (recovered = false) => {
+      window.clearTimeout(recoveryTimer);
+      const viewportHeight = Math.max(1, window.innerHeight);
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const headingOpacity = Number.parseFloat(getComputedStyle(timelineHeading).opacity) || 0;
+      const visuallyIncomplete =
+        wrapperRect.top > -viewportHeight * 0.78 ||
+        headingOpacity < 0.18;
+
+      if (recovered || visuallyIncomplete) {
+        window.gsap?.killTweensOf?.(wrapper);
+        if (window.gsap) {
+          window.gsap.set(wrapper, {
+            width: "100%",
+            opacity: 1,
+            position: "fixed",
+            y: "-100%",
+          });
+        } else {
+          wrapper.style.width = "100%";
+          wrapper.style.opacity = "1";
+          wrapper.style.position = "fixed";
+          wrapper.style.transform = "translate3d(0,-100%,0)";
+        }
+        revealExperienceContent();
+        const hostTop = experienceHost.getBoundingClientRect().top + window.scrollY;
+        setScroll(hostTop + Math.min(100, viewportHeight * 0.15));
+        html.dataset.pgPageTurnRecovered = "experience";
+      } else {
+        getScrollEngine()?.start?.();
+      }
+
+      if (html.dataset.pgNativeTurn !== "experience") {
+        html.dataset.pgNativeTurn = "experience";
+      }
+      requestSafeRefresh();
+    };
+
+    const finalizeProfile = (recovered = false) => {
+      window.clearTimeout(recoveryTimer);
+      if (recovered) {
+        window.gsap?.killTweensOf?.(wrapper);
+        if (window.gsap) {
+          window.gsap.set(wrapper, {
+            width: 0,
+            opacity: 1,
+            position: "fixed",
+            y: "99.26svh",
+          });
+          window.gsap.set(timelineHeading, { opacity: 0, y: "50%", scale: 0.7 });
+          window.gsap.set(timelineColumns, { opacity: 0, y: "30%" });
+          window.gsap.set(timelineProgress, { opacity: 0 });
+        } else {
+          wrapper.style.width = "0";
+          wrapper.style.opacity = "1";
+          wrapper.style.position = "fixed";
+          wrapper.style.transform = "translate3d(0,99.26svh,0)";
+        }
+        const rect = profileTarget.getBoundingClientRect();
+        const targetTop = rect.top + window.scrollY + rect.height - window.innerHeight;
+        setScroll(targetTop);
+        html.dataset.pgPageTurnRecovered = "profile";
+      } else {
+        getScrollEngine()?.start?.();
+      }
+
+      if (html.dataset.pgNativeTurn !== "profile") {
+        html.dataset.pgNativeTurn = "profile";
+      }
+      requestSafeRefresh();
+    };
+
+    const armRecovery = (state) => {
+      window.clearTimeout(recoveryTimer);
+      const token = ++transitionToken;
+      transitionStartedAt = performance.now();
+      html.dataset.pgPageTurnRecovery = `armed-${state}`;
+      recoveryTimer = window.setTimeout(() => {
+        if (token !== transitionToken || html.dataset.pgNativeTurn !== state) return;
+        html.dataset.pgPageTurnRecovery = `recovering-${state}`;
+        if (state === "forward") finalizeExperience(true);
+        else finalizeProfile(true);
+      }, 4600);
+    };
+
+    const reconcileState = () => {
+      const state = html.dataset.pgNativeTurn || "profile";
+      if (state === "forward" || state === "reverse") {
+        armRecovery(state);
+        return;
+      }
+
+      transitionToken += 1;
+      window.clearTimeout(recoveryTimer);
+      html.dataset.pgPageTurnRecovery = `settled-${state}`;
+      if (state === "experience") finalizeExperience(false);
+      else if (state === "profile") finalizeProfile(false);
+    };
+
+    new MutationObserver(reconcileState).observe(html, {
+      attributes: true,
+      attributeFilter: ["data-pg-native-turn"],
+    });
+
+    const recoverIfStillTransitioning = () => {
+      const state = html.dataset.pgNativeTurn;
+      if (
+        (state === "forward" || state === "reverse") &&
+        transitionStartedAt &&
+        performance.now() - transitionStartedAt >= 4400
+      ) {
+        if (state === "forward") finalizeExperience(true);
+        else finalizeProfile(true);
+      }
+    };
+
+    window.addEventListener("pageshow", () => window.setTimeout(reconcileState, 240));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) recoverIfStillTransitioning();
+    });
+    window.addEventListener("orientationchange", recoverIfStillTransitioning, { passive: true });
+    window.addEventListener("touchend", recoverIfStillTransitioning, { passive: true });
+
+    requestAnimationFrame(reconcileState);
   }
 
   function setupStaticTimelineCardHeight() {
@@ -2091,6 +2306,7 @@
   setupPanelGlow();
   setupHandoffVisual();
   setupHostRefreshGuards();
+  setupPageTurnRecovery();
   setupStaticTimelineCardHeight();
   setupTimelineProfileTextReveal();
   setupContactPage();
