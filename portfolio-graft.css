@@ -1299,6 +1299,9 @@ body > .w-layout-vflex.gap-24 {
 }
 
 .pg-project.has-touch-project-nav.is-work,
+.pg-project.has-touch-project-nav.is-work .pg-project__carousel,
+.pg-project.has-touch-project-nav.is-work .pg-project__stage,
+.pg-project.has-touch-project-nav.is-work .pg-project__card,
 .pg-project.has-touch-project-nav.is-work .pg-project__detail {
   touch-action: none;
   overscroll-behavior: none;

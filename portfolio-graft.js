@@ -2353,52 +2353,53 @@
       requestLayout();
     };
 
-    projectRoot.addEventListener("pointerdown", (event) => {
-      if (!usesTouchProjectLayout()) return;
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      if (event.target.closest(".pg-project__touch-nav, .pg-project__close, .pg-project__cta")) return;
-      if (event.clientX <= 24 || event.clientX >= window.innerWidth - 24) return;
-      if (touchDetailLocked && event.cancelable) event.preventDefault();
+    const isTouchGestureControl = (target) =>
+      target?.closest?.(".pg-project__touch-nav, .pg-project__close, .pg-project__cta");
+
+    const beginProjectGesture = ({ source, id, x, y }) => {
       cancelOpenAlignment();
       touchGesture = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        lastX: event.clientX,
+        source,
+        id,
+        startX: x,
+        startY: y,
+        lastX: x,
         lastAt: performance.now(),
         velocityX: 0,
         lock: "pending"
       };
-    }, { passive: false });
+    };
 
-    projectRoot.addEventListener("pointermove", (event) => {
-      if (!touchGesture || event.pointerId !== touchGesture.pointerId) return;
-      const dx = event.clientX - touchGesture.startX;
-      const dy = event.clientY - touchGesture.startY;
+    const updateProjectGesture = (clientX, clientY, event) => {
+      if (!touchGesture) return;
+      const dx = clientX - touchGesture.startX;
+      const dy = clientY - touchGesture.startY;
       const absX = Math.abs(dx);
       const absY = Math.abs(dy);
       const now = performance.now();
       const elapsed = Math.max(1, now - touchGesture.lastAt);
-      touchGesture.velocityX = (event.clientX - touchGesture.lastX) / elapsed;
-      touchGesture.lastX = event.clientX;
+      touchGesture.velocityX = (clientX - touchGesture.lastX) / elapsed;
+      touchGesture.lastX = clientX;
       touchGesture.lastAt = now;
 
       if (touchDetailLocked && event.cancelable) event.preventDefault();
 
       if (touchGesture.lock === "pending") {
         const dominantDistance = Math.max(absX, absY);
-        if (dominantDistance < 8) return;
-        if (absX >= absY * 1.08) {
+        if (dominantDistance < 7) return;
+
+        const horizontalRatio = touchDetailLocked ? 0.72 : 1.08;
+        if (absX >= absY * horizontalRatio) {
           touchGesture.lock = "horizontal";
-          projectRoot.setPointerCapture?.(event.pointerId);
         } else if (!touchDetailLocked && absY >= 14 && absY >= absX * 1.18) {
           touchGesture.lock = "vertical";
           touchDragProgress = 0;
           return;
-        } else if (dominantDistance >= 24) {
-          if (absX >= absY) {
+        } else if (dominantDistance >= 30) {
+          if (touchDetailLocked && absX >= absY * 0.55) {
             touchGesture.lock = "horizontal";
-            projectRoot.setPointerCapture?.(event.pointerId);
+          } else if (absX >= absY) {
+            touchGesture.lock = "horizontal";
           } else {
             touchGesture.lock = touchDetailLocked ? "blocked" : "vertical";
             touchDragProgress = 0;
@@ -2406,6 +2407,7 @@
           }
         }
       }
+
       if (touchGesture.lock !== "horizontal") return;
       if (event.cancelable) event.preventDefault();
 
@@ -2416,25 +2418,94 @@
       const resistance = atStart || atEnd ? 0.24 : 1;
       touchDragProgress = Math.max(-0.88, Math.min(0.88, (dx / gap) * resistance));
       requestLayout();
-    }, { passive: false });
+    };
 
-    const finishTouchGesture = (event) => {
-      if (!touchGesture || event.pointerId !== touchGesture.pointerId) return;
+    const finishProjectGesture = (clientX) => {
+      if (!touchGesture) return;
       const gesture = touchGesture;
-      const dx = event.clientX - gesture.startX;
+      const dx = clientX - gesture.startX;
       const rect = projectRoot.getBoundingClientRect();
-      const distanceThreshold = Math.max(36, Math.min(52, rect.width * 0.11));
+      const distanceThreshold = touchDetailLocked
+        ? Math.max(28, Math.min(44, rect.width * 0.085))
+        : Math.max(36, Math.min(52, rect.width * 0.11));
       const shouldMove = gesture.lock === "horizontal"
-        && (Math.abs(dx) >= distanceThreshold || Math.abs(gesture.velocityX) >= 0.35);
+        && (Math.abs(dx) >= distanceThreshold || Math.abs(gesture.velocityX) >= 0.28);
       resetTouchGesture();
       if (!shouldMove) return;
       suppressProjectClickUntil = performance.now() + 420;
       moveTouchProject(dx < 0 ? 1 : -1);
     };
 
+    projectRoot.addEventListener("pointerdown", (event) => {
+      if (!usesTouchProjectLayout()) return;
+      if (event.pointerType === "touch") return;
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (isTouchGestureControl(event.target)) return;
+      if (event.clientX <= 24 || event.clientX >= window.innerWidth - 24) return;
+      if (touchDetailLocked && event.cancelable) event.preventDefault();
+      beginProjectGesture({
+        source: "pointer",
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY
+      });
+    }, { passive: false });
+
+    projectRoot.addEventListener("pointermove", (event) => {
+      if (!touchGesture || touchGesture.source !== "pointer" || event.pointerId !== touchGesture.id) return;
+      updateProjectGesture(event.clientX, event.clientY, event);
+      if (touchGesture?.lock === "horizontal") {
+        projectRoot.setPointerCapture?.(event.pointerId);
+      }
+    }, { passive: false });
+
+    const finishTouchGesture = (event) => {
+      if (!touchGesture || touchGesture.source !== "pointer" || event.pointerId !== touchGesture.id) return;
+      finishProjectGesture(event.clientX);
+    };
+
     projectRoot.addEventListener("pointerup", finishTouchGesture, { passive: false });
-    projectRoot.addEventListener("pointercancel", resetTouchGesture, { passive: true });
-    projectRoot.addEventListener("lostpointercapture", resetTouchGesture, { passive: true });
+    projectRoot.addEventListener("pointercancel", (event) => {
+      if (touchGesture?.source === "pointer" && event.pointerId === touchGesture.id) resetTouchGesture();
+    }, { passive: true });
+    projectRoot.addEventListener("lostpointercapture", (event) => {
+      if (touchGesture?.source === "pointer" && event.pointerId === touchGesture.id) resetTouchGesture();
+    }, { passive: true });
+
+    const findGestureTouch = (touchList) => {
+      if (!touchGesture || touchGesture.source !== "touch") return null;
+      return Array.from(touchList || []).find((touch) => touch.identifier === touchGesture.id) || null;
+    };
+
+    projectRoot.addEventListener("touchstart", (event) => {
+      if (!usesTouchProjectLayout() || event.touches.length !== 1) return;
+      if (isTouchGestureControl(event.target)) return;
+      const touch = event.changedTouches[0];
+      if (!touch || touch.clientX <= 18 || touch.clientX >= window.innerWidth - 18) return;
+      if (touchDetailLocked && event.cancelable) event.preventDefault();
+      beginProjectGesture({
+        source: "touch",
+        id: touch.identifier,
+        x: touch.clientX,
+        y: touch.clientY
+      });
+    }, { passive: false });
+
+    projectRoot.addEventListener("touchmove", (event) => {
+      const touch = findGestureTouch(event.touches);
+      if (!touch) return;
+      updateProjectGesture(touch.clientX, touch.clientY, event);
+    }, { passive: false });
+
+    projectRoot.addEventListener("touchend", (event) => {
+      const touch = findGestureTouch(event.changedTouches);
+      if (!touch) return;
+      finishProjectGesture(touch.clientX);
+    }, { passive: false });
+
+    projectRoot.addEventListener("touchcancel", (event) => {
+      if (findGestureTouch(event.changedTouches)) resetTouchGesture();
+    }, { passive: true });
     projectRoot.addEventListener("dragstart", (event) => event.preventDefault());
     projectRoot.addEventListener("click", (event) => {
       if (performance.now() >= suppressProjectClickUntil) return;

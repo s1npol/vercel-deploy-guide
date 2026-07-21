@@ -21,7 +21,7 @@
   // The legacy host runtime is optional for the portfolio shell. Never let it
   // hold the first view hostage when a network-bound Webflow animation fails.
   const maximumWaitAfterDomMs = 7200;
-  const absoluteWatchdogMs = 14000;
+  const absoluteWatchdogMs = 18000;
   const revealDurationMs = reduceMotion ? 320 : 920;
   const completionHoldMs = reduceMotion ? 80 : 420;
   const startedAt = performance.now();

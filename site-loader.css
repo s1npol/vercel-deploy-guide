@@ -291,15 +291,18 @@
 
   .site-loader__progress {
     top: calc(69.5% - 28px);
-    left: calc(80% - (var(--loader-sweep) * .6%));
-    gap: 7px;
-    font-size: 10px;
+    left: clamp(56px, calc(80% - (var(--loader-sweep) * .6%)), calc(100% - 56px));
+    gap: 5px;
+    max-width: calc(100vw - 24px);
+    font-size: clamp(8px, 2.2vw, 9px);
+    letter-spacing: .025em;
+    white-space: nowrap;
   }
 
   .site-loader__progress-marker {
-    width: 7px;
-    height: 7px;
-    flex-basis: 7px;
+    width: 6px;
+    height: 6px;
+    flex-basis: 6px;
   }
 }
 
