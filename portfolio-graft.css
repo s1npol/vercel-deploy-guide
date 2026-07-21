@@ -2257,6 +2257,12 @@ body > .w-layout-vflex.gap-24 {
 }
 
 @media (max-width: 480px) {
+  .pg-title {
+    width: 75vw;
+    font-size: clamp(48px, 15vw, 72px);
+    line-height: 0.94;
+  }
+
   .pg-project button.pg-project__brand,
   .pg-project__brand b,
   .pg-project button.pg-project__close {
