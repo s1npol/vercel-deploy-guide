@@ -86,6 +86,11 @@
     --project-canvas-edge: 22px;
   }
 
+  body:has(.project-stage)::before,
+  body:has(.project-stage)::after {
+    font-size: clamp(9.796875rem, 16.03125vw, 35.625rem);
+  }
+
   .project-stage {
     border-radius: 14px;
   }
