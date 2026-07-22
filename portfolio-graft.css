@@ -2096,6 +2096,30 @@ html.pg-project-touch-locked body {
 [scrollto-lenis] {
   position: relative;
   z-index: 2;
+  isolation: isolate;
+  background-color: #010203;
+  background-image:
+    linear-gradient(rgba(225, 238, 248, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(225, 238, 248, 0.055) 1px, transparent 1px),
+    linear-gradient(180deg, #010203 0%, #020406 14%, #050a10 46%, #020406 78%, #010203 100%);
+  background-size:
+    88px 88px,
+    88px 88px,
+    100% 100%;
+  background-position: center top;
+}
+
+@media (max-width: 780px) {
+  [scrollto-lenis] {
+    background-image:
+      linear-gradient(rgba(225, 238, 248, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(225, 238, 248, 0.045) 1px, transparent 1px),
+      linear-gradient(180deg, #010203 0%, #020406 16%, #050a10 48%, #020406 78%, #010203 100%);
+    background-size:
+      56px 56px,
+      56px 56px,
+      100% 100%;
+  }
 }
 
 /* Typography system: global, navigation, hero, and contact. */
