@@ -1,0 +1,115 @@
+/*
+ * Wide-screen project canvas
+ *
+ * This treatment is intentionally limited to the three desktop ranges below.
+ * The intro, phones, and tablets retain the original full-viewport layout.
+ */
+
+@media (min-width: 1200px) {
+  html:has(.project-stage),
+  body:has(.project-stage),
+  body:has(.project-stage) #root {
+    background: #151515;
+  }
+
+  body:has(.project-stage) {
+    --project-canvas-width: 84vw;
+    --project-canvas-side: 8vw;
+    --project-canvas-edge: 18px;
+    --project-stage-word: #252525;
+    background-attachment: fixed;
+    overflow-x: clip;
+  }
+
+  body:has(.project-stage) #root {
+    background: transparent;
+  }
+
+  body:has(.project-stage)::before,
+  body:has(.project-stage)::after {
+    content: "SINPOL";
+    position: fixed;
+    z-index: 0;
+    writing-mode: vertical-rl;
+    color: var(--project-stage-word);
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: clamp(13.75rem, 22.5vw, 50rem);
+    font-weight: 700;
+    line-height: 0.72;
+    letter-spacing: -0.13em;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  body:has(.project-stage)::before {
+    top: 30%;
+    left: calc(var(--project-canvas-side) * 0.78);
+    transform: translate(-50%, -50%) rotate(180deg);
+  }
+
+  body:has(.project-stage)::after {
+    top: 70%;
+    right: calc(var(--project-canvas-side) * 0.78);
+    transform: translate(50%, -50%);
+  }
+
+  .project-stage {
+    position: relative;
+    z-index: 1;
+    width: var(--project-canvas-width);
+    min-height: calc(100svh - (var(--project-canvas-edge) * 2));
+    margin: var(--project-canvas-edge) auto;
+    border-radius: 10px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 52px rgba(0, 0, 0, 0.62),
+      0 34px 110px rgba(0, 0, 0, 0.58);
+    overflow: clip;
+  }
+
+  body:has(.project-stage) .site-header {
+    left: var(--project-canvas-side);
+    right: var(--project-canvas-side);
+  }
+
+  body:has(.project-stage) .project-nav-shell {
+    top: calc(var(--project-canvas-edge) + 8px);
+  }
+}
+
+/* Conventional desktop monitors. */
+@media (min-width: 1440px) and (max-width: 2559px) {
+  body:has(.project-stage) {
+    --project-canvas-width: 88vw;
+    --project-canvas-side: 6vw;
+    --project-canvas-edge: 22px;
+  }
+
+  .project-stage {
+    border-radius: 14px;
+  }
+}
+
+/* 4K and larger canvases keep a little more breathing room at both sides. */
+@media (min-width: 2560px) {
+  body:has(.project-stage) {
+    --project-canvas-width: 84vw;
+    --project-canvas-side: 8vw;
+    --project-canvas-edge: 30px;
+  }
+
+  .project-stage {
+    border-radius: 18px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.065),
+      0 0 76px rgba(0, 0, 0, 0.68),
+      0 48px 150px rgba(0, 0, 0, 0.62);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-stage {
+    scroll-behavior: auto;
+  }
+}
